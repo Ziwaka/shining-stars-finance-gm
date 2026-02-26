@@ -13,7 +13,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   
   const [config, setConfig] = useState<any>({ categoryList: [], prefixes: {}, lastSerials: {}, suppliers: [], recentItems: [] });
   
-  // 🔴 ၅ ဆင့်လုံးအတွက် State များ [cite: 2026-02-23]
   const [category, setCategory] = useState('');
   const [sub1, setSub1] = useState('');
   const [sub2, setSub2] = useState('');
@@ -38,7 +37,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       });
   }, []);
 
-  // 🔴 ၅ ဆင့်လုံးအတွက် Flat Filtering Logic [cite: 2026-02-23]
   const categoryOptions = useMemo<string[]>(() => Array.from(new Set(config.categoryList.map((row: any) => String(row.Category || row.category || '')))).filter(Boolean) as string[], [config.categoryList]);
   const sub1Options = useMemo<string[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => (row.Category || row.category) === category).map((row: any) => String(row.Sub_1 || row.sub1 || '')))).filter(Boolean) as string[], [category, config.categoryList]);
   const sub2Options = useMemo<string[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => (row.Category || row.category) === category && (row.Sub_1 || row.sub1) === sub1).map((row: any) => String(row.Sub_2 || row.sub2 || '')))).filter(Boolean) as string[], [sub1, config.categoryList, category]);
@@ -53,6 +51,42 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
     const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
     setVoucherno(`${prefix}-${month}-${nextNum}`);
+  };
+
+  // 🔴 ပုံအရွယ်အစား လျှော့ချပေးမည့် Auto Compressor စနစ် 🔴
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        // အချိုးကျ အရွယ်အစားချုံ့ခြင်း
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Quality 70% ဖြင့် Compress လုပ်၍ Data URI ထုတ်ယူခြင်း
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setImage(compressedBase64);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const addItem = () => {
@@ -118,10 +152,21 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-black">
           <div className="space-y-4 font-black">
              <div className="relative h-44 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden font-black">
-               {image ? <><img src={image} className="w-full h-full object-cover font-black"/><button onClick={() => setImage('')} className="absolute top-2 right-2 bg-rose-500 text-white p-2 rounded-full font-black"><Trash2 size={14}/></button></> : <label className="cursor-pointer flex flex-col items-center font-black"><Camera size={32} className="text-slate-300 mb-2 font-black"/><span className="text-[10px] text-slate-400 font-black">VR PHOTO</span><input type="file" accept="image/*" className="hidden font-black" onChange={e => { const f=e.target.files?.[0]; if(f){ const r=new FileReader(); r.onloadend=()=>setImage(r.result as string); r.readAsDataURL(f); } }} /></label>}
+               {image ? (
+                 <>
+                   <img src={image} className="w-full h-full object-cover font-black"/>
+                   <button onClick={() => setImage('')} className="absolute top-2 right-2 bg-rose-500 text-white p-2 rounded-full font-black"><Trash2 size={14}/></button>
+                 </>
+               ) : (
+                 <label className="cursor-pointer flex flex-col items-center font-black">
+                   <Camera size={32} className="text-slate-300 mb-2 font-black"/>
+                   <span className="text-[10px] text-slate-400 font-black">VR PHOTO</span>
+                   {/* 🔴 Image Compressor Function သို့ ချိတ်ဆက်ထားခြင်း 🔴 */}
+                   <input type="file" accept="image/*" className="hidden font-black" onChange={handleImageUpload} />
+                 </label>
+               )}
              </div>
              
-             {/* 🔴 ၅ ဆင့်စလုံးအတွက် Selectors များ 🔴 */}
              <div className="space-y-1 font-black">
                <label className="text-[10px] text-slate-400 uppercase font-black">CATEGORY</label>
                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs uppercase font-black" value={category} onChange={e => { setCategory(e.target.value); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5(''); generateVrID(e.target.value, itemList); }}>

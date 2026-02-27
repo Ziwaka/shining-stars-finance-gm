@@ -29,7 +29,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => {
-    fetch(process.env.NEXT_PUBLIC_GAS_URL!)
+    // 🔴 Frontend Cache (မှတ်ဉာဏ်ဟောင်း) ကို ကျော်ဖြတ်ရန် URL နောက်တွင် Timestamp (?t=...) ထည့်သွင်းထားပါသည် 🔴
+    const noCacheUrl = `${process.env.NEXT_PUBLIC_GAS_URL}?t=${new Date().getTime()}`;
+
+    fetch(noCacheUrl)
       .then(res => res.json())
       .then(data => {
         setConfig({
@@ -44,7 +47,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
         if (data.users && data.users.length > 0) setEnteredBy(String(data.users[0]));
         if (data.accounts && data.accounts.length > 0) setAccount(String(data.accounts[0]));
-      });
+      })
+      .catch(err => console.error("Failed to fetch config:", err));
   }, []);
 
   const categoryOptions = useMemo<any[]>(() => Array.from(new Set(config.categoryList.map((row: any) => String(row.Category || row.category || '')))).filter(Boolean), [config.categoryList]);

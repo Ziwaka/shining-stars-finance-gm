@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
 import { sendToSheet } from '@/lib/api';
-import { Plus, Trash2, Save, RefreshCcw, Camera, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertTriangle, MessageSquare, Hash, Banknote, Search } from 'lucide-react';
+import { Plus, Trash2, Save, RefreshCcw, Camera, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertTriangle, MessageSquare, Hash, Banknote, Search, User, Wallet, BellRing } from 'lucide-react';
 
 export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [type, setType] = useState<'Cash Out' | 'Cash In'>('Cash Out');
@@ -11,7 +11,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [image, setImage] = useState<string>('');
   const [itemList, setItemList] = useState<any[]>([]);
   
-  const [config, setConfig] = useState<any>({ categoryList: [], prefixes: {}, lastSerials: {}, suppliers: [], recentItems: [] });
+  const [enteredBy, setEnteredBy] = useState('GM');
+  const [account, setAccount] = useState('GM ACCOUNT');
+
+  const [config, setConfig] = useState<any>({ categoryList: [], prefixes: {}, lastSerials: {}, suppliers: [], recentItems: [], users: [], accounts: [] });
   
   const [category, setCategory] = useState('');
   const [sub1, setSub1] = useState('');
@@ -22,6 +25,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
   const [currentItem, setCurrentItem] = useState({ item_description: '', count: '' as any, cost_piece: '' as any, note: '' });
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+  
+  const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => {
     fetch(process.env.NEXT_PUBLIC_GAS_URL!)
@@ -32,57 +37,45 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           prefixes: data.prefixes || {},
           lastSerials: data.lastSerials || {},
           suppliers: data.suppliers || [],
-          recentItems: data.recentItems || []
+          recentItems: data.recentItems || [],
+          users: data.users || [],       
+          accounts: data.accounts || []  
         });
+
+        if (data.users && data.users.length > 0) setEnteredBy(String(data.users[0]));
+        if (data.accounts && data.accounts.length > 0) setAccount(String(data.accounts[0]));
       });
   }, []);
 
-  const categoryOptions = useMemo<string[]>(() => Array.from(new Set(config.categoryList.map((row: any) => String(row.Category || row.category || '')))).filter(Boolean) as string[], [config.categoryList]);
-  const sub1Options = useMemo<string[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => (row.Category || row.category) === category).map((row: any) => String(row.Sub_1 || row.sub1 || '')))).filter(Boolean) as string[], [category, config.categoryList]);
-  const sub2Options = useMemo<string[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => (row.Category || row.category) === category && (row.Sub_1 || row.sub1) === sub1).map((row: any) => String(row.Sub_2 || row.sub2 || '')))).filter(Boolean) as string[], [sub1, config.categoryList, category]);
-  const sub3Options = useMemo<string[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => (row.Category || row.category) === category && (row.Sub_1 || row.sub1) === sub1 && (row.Sub_2 || row.sub2) === sub2).map((row: any) => String(row.Sub_3 || row.sub3 || '')))).filter(Boolean) as string[], [sub2, config.categoryList, category, sub1]);
-  const sub4Options = useMemo<string[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => (row.Category || row.category) === category && (row.Sub_1 || row.sub1) === sub1 && (row.Sub_2 || row.sub2) === sub2 && (row.Sub_3 || row.sub3) === sub3).map((row: any) => String(row.Sub_4 || row.sub4 || '')))).filter(Boolean) as string[], [sub3, config.categoryList, category, sub1, sub2]);
-  const sub5Options = useMemo<string[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => (row.Category || row.category) === category && (row.Sub_1 || row.sub1) === sub1 && (row.Sub_2 || row.sub2) === sub2 && (row.Sub_3 || row.sub3) === sub3 && (row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean) as string[], [sub4, config.categoryList, category, sub1, sub2, sub3]);
+  const categoryOptions = useMemo<any[]>(() => Array.from(new Set(config.categoryList.map((row: any) => String(row.Category || row.category || '')))).filter(Boolean), [config.categoryList]);
+  const sub1Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category).map((row: any) => String(row.Sub_1 || row.sub1 || '')))).filter(Boolean), [category, config.categoryList]);
+  const sub2Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1).map((row: any) => String(row.Sub_2 || row.sub2 || '')))).filter(Boolean), [sub1, config.categoryList, category]);
+  const sub3Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2).map((row: any) => String(row.Sub_3 || row.sub3 || '')))).filter(Boolean), [sub2, config.categoryList, category, sub1]);
+  const sub4Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3).map((row: any) => String(row.Sub_4 || row.sub4 || '')))).filter(Boolean), [sub3, config.categoryList, category, sub1, sub2]);
+  const sub5Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3 && String(row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean), [sub4, config.categoryList, category, sub1, sub2, sub3]);
 
   const generateVrID = (cat: string, currentBatch: any[]) => {
     const prefix = type === 'Cash In' ? 'INC' : (config.prefixes[cat] || "EXP");
     const lastNum = config.lastSerials[prefix] || 0;
-    const inBatchCount = currentBatch.filter(i => i.voucherno.startsWith(prefix)).length;
+    const inBatchCount = currentBatch.filter(i => String(i.voucherno).startsWith(prefix)).length;
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
     const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
     setVoucherno(`${prefix}-${month}-${nextNum}`);
   };
 
-  // 🔴 ပုံအရွယ်အစား လျှော့ချပေးမည့် Auto Compressor စနစ် 🔴
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 800;
-        let width = img.width;
-        let height = img.height;
-
-        // အချိုးကျ အရွယ်အစားချုံ့ခြင်း
-        if (width > height) {
-          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-        } else {
-          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        // Quality 70% ဖြင့် Compress လုပ်၍ Data URI ထုတ်ယူခြင်း
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-        setImage(compressedBase64);
+        let width = img.width; let height = img.height;
+        if (width > height) { if (width > 800) { height *= 800 / width; width = 800; } } else { if (height > 800) { width *= 800 / height; height = 800; } }
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
+        setImage(canvas.toDataURL('image/jpeg', 0.7));
       };
       img.src = event.target?.result as string;
     };
@@ -96,7 +89,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     
     const total = Math.round(countNum * costNum);
     const newItem = { 
-      date, vendor, type, voucherno, category, sub1, sub2, sub3, sub4, sub5,
+      date, entered_by: enteredBy, account, vendor, type, voucherno, category, sub1, sub2, sub3, sub4, sub5,
       item_description: currentItem.item_description, note: currentItem.note,
       count: countNum, cost_piece: costNum, cost_total: total, image_data: image, id: Date.now() 
     };
@@ -104,8 +97,29 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const updatedList = [...itemList, newItem];
     setItemList(updatedList);
     generateVrID(category, updatedList);
+    
+    setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`);
+    setTimeout(() => setToastMsg(''), 3000);
+
     setCurrentItem({ item_description: '', count: '', cost_piece: '', note: '' });
     setImage('');
+  };
+
+  const sendTelegramNotification = async (items: any[]) => {
+    const botToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID;
+    if (!botToken || !chatId) return; 
+
+    try {
+      const totalAmt = items.reduce((s, x) => s + x.cost_total, 0);
+      const msg = `🚨 *NEW TRANSACTIONS SUBMITTED*\n\n👤 *By:* ${enteredBy}\n💳 *Account:* ${account}\n📈 *Type:* ${type}\n💰 *Total Amount:* ${totalAmt.toLocaleString()} MMK\n🧾 *Items:* ${items.length} records`;
+      
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'Markdown' })
+      });
+    } catch (e) { console.error("Telegram Noti Failed", e); }
   };
 
   const handleFinalSubmit = async () => {
@@ -113,18 +127,53 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setSubmitStatus('processing'); 
     try {
       for (const item of itemList) { await sendToSheet(item); }
+      await sendTelegramNotification(itemList); 
       setSubmitStatus('success'); setItemList([]); onRefresh();
       setTimeout(() => setSubmitStatus('idle'), 3000);
     } catch (err) { setSubmitStatus('error'); setTimeout(() => setSubmitStatus('idle'), 3000); }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950 uppercase">
+    <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950 uppercase">
+      
+      {toastMsg && (
+        <div className="absolute top-4 right-4 bg-emerald-600 text-white p-4 rounded-xl shadow-2xl flex items-center gap-3 z-50 animate-bounce font-black">
+          <BellRing size={20} />
+          {toastMsg}
+        </div>
+      )}
+
       {/* INPUT PANEL */}
       <div className="lg:col-span-8 p-6 space-y-6 border-r border-slate-100 font-black">
-        <div className="flex bg-slate-100 p-1 rounded-2xl w-fit font-black">
-          <button onClick={() => { setType('Cash Out'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-purple-900 text-white shadow-lg' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
-          <button onClick={() => { setType('Cash In'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash In' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400'}`}><ArrowUpRight size={16} className="mr-2"/> CASH IN</button>
+        
+        <div className="flex flex-wrap items-center gap-4 bg-slate-100 p-2 rounded-2xl w-fit font-black">
+          <div className="flex">
+            <button onClick={() => { setType('Cash Out'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-purple-900 text-white shadow-lg' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
+            <button onClick={() => { setType('Cash In'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash In' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400'}`}><ArrowUpRight size={16} className="mr-2"/> CASH IN</button>
+          </div>
+          <div className="h-6 w-[2px] bg-slate-300"></div>
+          
+          <div className="flex items-center gap-2 px-2">
+            <User size={16} className="text-slate-500"/>
+            <select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={enteredBy} onChange={e => setEnteredBy(e.target.value)}>
+              {config.users && config.users.length > 0 ? (
+                config.users.map((u: any, i: number) => <option key={`user-${i}`} value={String(u)}>{String(u)}</option>)
+              ) : (
+                <><option value="GM">GM</option><option value="FOUNDER">FOUNDER</option></>
+              )}
+            </select>
+          </div>
+          
+          <div className="flex items-center gap-2 px-2 border-l-2 border-slate-300 pl-4">
+            <Wallet size={16} className="text-slate-500"/>
+            <select className="bg-transparent text-sm outline-none font-black text-rose-600 cursor-pointer uppercase" value={account} onChange={e => setAccount(e.target.value)}>
+              {config.accounts && config.accounts.length > 0 ? (
+                config.accounts.map((a: any, i: number) => <option key={`acc-${i}`} value={String(a)}>{String(a)}</option>)
+              ) : (
+                <><option value="GM ACCOUNT">GM ACCOUNT</option><option value="FOUNDER ACCOUNT">FOUNDER ACCOUNT</option></>
+              )}
+            </select>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 rounded-2xl border-b-4 border-slate-950 font-black">
@@ -133,7 +182,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             <div className="relative font-black">
               <input list="suppliers" className="w-full bg-white border border-slate-200 p-3 pr-10 rounded-xl outline-none focus:border-purple-900 text-sm font-black uppercase" value={vendor} onChange={e => setVendor(e.target.value)} placeholder="SEARCH..." />
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 font-black" size={16} />
-              <datalist id="suppliers">{config.suppliers?.map((s:any, i:number) => <option key={i} value={s} />)}</datalist>
+              <datalist id="suppliers">{config.suppliers?.map((s: any, i: number) => <option key={`sup-${i}`} value={String(s)} />)}</datalist>
             </div>
           </div>
           <div className="space-y-1 font-black">
@@ -161,7 +210,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                  <label className="cursor-pointer flex flex-col items-center font-black">
                    <Camera size={32} className="text-slate-300 mb-2 font-black"/>
                    <span className="text-[10px] text-slate-400 font-black">VR PHOTO</span>
-                   {/* 🔴 Image Compressor Function သို့ ချိတ်ဆက်ထားခြင်း 🔴 */}
                    <input type="file" accept="image/*" className="hidden font-black" onChange={handleImageUpload} />
                  </label>
                )}
@@ -170,14 +218,14 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
              <div className="space-y-1 font-black">
                <label className="text-[10px] text-slate-400 uppercase font-black">CATEGORY</label>
                <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs uppercase font-black" value={category} onChange={e => { setCategory(e.target.value); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5(''); generateVrID(e.target.value, itemList); }}>
-                 <option value="" className="font-black">SELECT CATEGORY</option>{categoryOptions.map(c => <option key={c} value={c} className="font-black">{c}</option>)}
+                 <option value="" className="font-black">SELECT CATEGORY</option>{categoryOptions.map((c: any, i: number) => <option key={`cat-${i}`} value={String(c)} className="font-black">{String(c)}</option>)}
                </select>
              </div>
              {sub1Options.length > 0 && (
                <div className="space-y-1 font-black">
                  <label className="text-[10px] text-slate-400 uppercase font-black">SUB 1</label>
                  <select className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl text-xs uppercase font-black" value={sub1} onChange={e => { setSub1(e.target.value); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }}>
-                   <option value="" className="font-black">SELECT</option>{sub1Options.map(o => <option key={o} value={o} className="font-black">{o}</option>)}
+                   <option value="" className="font-black">SELECT</option>{sub1Options.map((o: any, i: number) => <option key={`s1-${i}`} value={String(o)} className="font-black">{String(o)}</option>)}
                  </select>
                </div>
              )}
@@ -185,7 +233,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                <div className="space-y-1 font-black">
                  <label className="text-[10px] text-slate-400 uppercase font-black">SUB 2</label>
                  <select className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl text-xs uppercase font-black" value={sub2} onChange={e => { setSub2(e.target.value); setSub3(''); setSub4(''); setSub5(''); }}>
-                   <option value="" className="font-black">SELECT</option>{sub2Options.map(o => <option key={o} value={o} className="font-black">{o}</option>)}
+                   <option value="" className="font-black">SELECT</option>{sub2Options.map((o: any, i: number) => <option key={`s2-${i}`} value={String(o)} className="font-black">{String(o)}</option>)}
                  </select>
                </div>
              )}
@@ -193,7 +241,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                <div className="space-y-1 font-black">
                  <label className="text-[10px] text-slate-400 uppercase font-black">SUB 3</label>
                  <select className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl text-xs uppercase font-black" value={sub3} onChange={e => { setSub3(e.target.value); setSub4(''); setSub5(''); }}>
-                   <option value="" className="font-black">SELECT</option>{sub3Options.map(o => <option key={o} value={o} className="font-black">{o}</option>)}
+                   <option value="" className="font-black">SELECT</option>{sub3Options.map((o: any, i: number) => <option key={`s3-${i}`} value={String(o)} className="font-black">{String(o)}</option>)}
                  </select>
                </div>
              )}
@@ -201,7 +249,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                <div className="space-y-1 font-black">
                  <label className="text-[10px] text-slate-400 uppercase font-black">SUB 4</label>
                  <select className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl text-xs uppercase font-black" value={sub4} onChange={e => { setSub4(e.target.value); setSub5(''); }}>
-                   <option value="" className="font-black">SELECT</option>{sub4Options.map(o => <option key={o} value={o} className="font-black">{o}</option>)}
+                   <option value="" className="font-black">SELECT</option>{sub4Options.map((o: any, i: number) => <option key={`s4-${i}`} value={String(o)} className="font-black">{String(o)}</option>)}
                  </select>
                </div>
              )}
@@ -209,7 +257,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                <div className="space-y-1 font-black">
                  <label className="text-[10px] text-slate-400 uppercase font-black">SUB 5</label>
                  <select className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl text-xs uppercase font-black" value={sub5} onChange={e => setSub5(e.target.value)}>
-                   <option value="" className="font-black">SELECT</option>{sub5Options.map(o => <option key={o} value={o} className="font-black">{o}</option>)}
+                   <option value="" className="font-black">SELECT</option>{sub5Options.map((o: any, i: number) => <option key={`s5-${i}`} value={String(o)} className="font-black">{String(o)}</option>)}
                  </select>
                </div>
              )}
@@ -219,7 +267,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             <div className="space-y-1 font-black">
               <label className="text-[10px] text-slate-400 uppercase font-black">ITEM DESCRIPTION</label>
               <input list="items" className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl text-sm outline-none uppercase font-black" placeholder="DETAILS" value={currentItem.item_description} onChange={e => setCurrentItem({...currentItem, item_description: e.target.value})} />
-              <datalist id="items">{config.recentItems?.map((i:any, idx:number) => <option key={idx} value={i} className="font-black" />)}</datalist>
+              <datalist id="items">{config.recentItems?.map((item: any, idx: number) => <option key={`item-${idx}`} value={String(item)} className="font-black" />)}</datalist>
             </div>
             
             <div className="grid grid-cols-2 gap-4 font-black">
@@ -245,7 +293,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         </div>
       </div>
 
-      {/* RIGHT: BATCH SIDEBAR */}
       <div className="lg:col-span-4 flex flex-col bg-slate-100 border-l border-slate-200 font-black">
         <div className="bg-slate-950 p-5 text-white flex justify-between items-center font-black">
           <span className="text-[10px] tracking-[0.3em] font-black">BATCH ({itemList.length})</span>
@@ -257,6 +304,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                 <div className="space-y-1 font-black">
                   <p className="text-[10px] text-purple-600 font-black">{i.voucherno}</p>
                   <p className="text-xs leading-tight font-black">{i.item_description}</p>
+                  <p className="text-[8px] text-slate-400 uppercase font-black">[{i.entered_by} • {i.account}]</p>
                 </div>
                 <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="text-rose-500 p-1 font-black"><Trash2 size={14} className="font-black"/></button>
               </div>

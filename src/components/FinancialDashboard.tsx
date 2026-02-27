@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Tag, Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter } from 'lucide-react';
+import { Tag, Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle } from 'lucide-react';
 
 const COLORS = ['#1e1b4b', '#4c1d95', '#6d28d9', '#7c3aed', '#8b5cf6', '#a78bfa', '#c084fc', '#e879f9'];
 
@@ -30,7 +30,10 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
         vendor: (v.vendor || v.Vendor || '').toString(),
         note: (v.note || v.Note || '').toString().toUpperCase(),
         cost_total: Math.round(Number(rawAmount) || 0), 
-        image_data: (v.image_data || v.Image_Data || '').toString()
+        image_data: (v.image_data || v.Image_Data || '').toString(),
+        // 🔴 ဖတ်ယူရန် 🔴
+        entered_by: (v.entered_by || v.Entered_By || 'GM').toString().toUpperCase(),
+        account: (v.account || v.Account || 'GM ACCOUNT').toString().toUpperCase()
       };
     });
   }, [vouchers]);
@@ -90,7 +93,19 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
 
   return (
     <div className="space-y-8 font-black text-slate-950 uppercase">
-      {/* 🔴 FILTERS (Compact) 🔴 */}
+      
+      {/* 🔴 WARNING MARQUEE (Negative Balance) 🔴 */}
+      {analytics.balance < 0 && (
+        <div className="w-full bg-rose-600 text-white p-3 rounded-2xl border-4 border-rose-900 shadow-xl overflow-hidden font-black">
+          <div className="animate-pulse flex justify-center items-center gap-4 text-xs tracking-widest uppercase font-black">
+            <AlertTriangle size={20} />
+            <span>⚠️ WARNING: YOUR CURRENT ACCOUNT BALANCE IS NEGATIVE ({analytics.balance.toLocaleString()} MMK) ⚠️</span>
+            <AlertTriangle size={20} />
+          </div>
+        </div>
+      )}
+
+      {/* FILTERS */}
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-3 items-center font-black">
         <Filter className="text-purple-600" size={18}/>
         <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-black" value={filter.startDate} onChange={e => setFilter({...filter, startDate: e.target.value})} />
@@ -101,7 +116,7 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
         <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', item: '', vendor: '' })} className="p-2.5 px-4 bg-slate-950 text-white rounded-lg text-xs hover:bg-rose-600 transition-all font-black">CLEAR</button>
       </div>
 
-      {/* 🔴 SUMMARY TILES (Compact) 🔴 */}
+      {/* SUMMARY TILES */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-emerald-600 p-6 rounded-[2rem] text-white shadow-md border-b-[6px] border-emerald-800">
           <p className="text-[10px] opacity-80 mb-2 tracking-widest font-black">CASH IN</p>
@@ -117,7 +132,6 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
         </div>
       </div>
 
-      {/* 🔴 MAIN CHARTS (Compact) 🔴 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 min-h-[320px]">
           <h3 className="text-[10px] text-slate-400 mb-6 flex items-center gap-2 font-black"><TrendingUp size={16}/> TRENDS</h3>
@@ -145,7 +159,6 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
         </div>
       </div>
 
-      {/* 🔴 DYNAMIC CHARTS (Compact) 🔴 */}
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2">
           <BarChart3 className="text-purple-600" size={24} />
@@ -170,7 +183,6 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
         </div>
       </div>
 
-      {/* 🔴 HIERARCHICAL AUDIT LOG (Compact) 🔴 */}
       <div className="space-y-8">
         <div className="flex justify-between items-center px-2">
           <div className="flex items-center gap-3">
@@ -193,7 +205,7 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
                   <thead className="bg-slate-50 text-[9px] text-slate-400 border-b border-slate-200 font-black">
                     <tr>
                       <th className="pb-3 px-3 font-black">DATE & ID</th>
-                      <th className="pb-3 px-3 font-black">DETAILS & NOTES</th>
+                      <th className="pb-3 px-3 font-black">DETAILS & ACCOUNT</th>
                       <th className="pb-3 px-3 text-right font-black">AMOUNT</th>
                       <th className="pb-3 px-3 text-center font-black">PROOF</th>
                     </tr>
@@ -208,16 +220,28 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
                         <td className="py-4 px-3">
                           <div className="text-xs font-black">{v.item}</div>
                           <div className="text-[9px] text-slate-400 mt-1 font-black uppercase">
-                            {v.vendor} 
-                            {[v.sub2, v.sub3, v.sub4, v.sub5].filter(Boolean).map(s => ` ➔ ${s}`).join('')}
+                            {v.vendor} {[v.sub2, v.sub3, v.sub4, v.sub5].filter(Boolean).map(s => ` ➔ ${s}`).join('')}
                           </div>
+                          
+                          {/* 🔴 Account & Entered By ကို ပြသခြင်း 🔴 */}
+                          <div className="mt-1 flex gap-2">
+                            <span className="bg-purple-100 text-purple-900 px-2 py-0.5 rounded text-[8px] font-black tracking-widest border border-purple-200">ACC: {v.account}</span>
+                            <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[8px] font-black tracking-widest border border-slate-300">BY: {v.entered_by}</span>
+                          </div>
+
                           {v.note && (
                             <div className="mt-2 text-[9px] text-purple-900 bg-purple-50 p-2 rounded-lg font-black border-l-2 border-purple-500 max-w-lg">
                               📝 {v.note}
                             </div>
                           )}
                         </td>
-                        <td className="py-4 px-3 text-right text-base font-black">{v.cost_total.toLocaleString()}</td>
+                        <td className="py-4 px-3 text-right text-base font-black">
+                          {v.type === 'Cash Out' ? (
+                            <span className="text-rose-600">- {v.cost_total.toLocaleString()}</span>
+                          ) : (
+                            <span className="text-emerald-600">+ {v.cost_total.toLocaleString()}</span>
+                          )}
+                        </td>
                         <td className="py-4 px-3 text-center font-black">
                           {v.image_data ? <button onClick={() => setSelectedImg(v.image_data)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-950 hover:text-white transition-all"><ImageIcon size={16}/></button> : "-"}
                         </td>

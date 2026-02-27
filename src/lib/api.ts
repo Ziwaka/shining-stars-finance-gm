@@ -1,12 +1,16 @@
-export async function sendToSheet(formData: any) {
-  const GAS_URL = process.env.NEXT_PUBLIC_GAS_URL;
-  if (!GAS_URL) throw new Error("GAS URL is missing in .env.local");
-
-  const response = await fetch(GAS_URL, {
+export async function sendToSheet(data: any) {
+  const res = await fetch(process.env.NEXT_PUBLIC_GAS_URL!, {
     method: 'POST',
-    mode: 'no-cors', // GAS အတွက် no-cors သုံးရပါမည်
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(formData),
+    body: JSON.stringify(data),
   });
-  return { result: "success" }; // no-cors ဖြစ်၍ response body ကို ဖတ်၍မရသော်လည်း အလုပ်လုပ်ပါသည်
+  return res.json();
+}
+
+// 🔴 Transaction တစ်ခုချင်းစီကို Voucher ID ဖြင့် ဖျက်ရန် 🔴
+export async function deleteFromSheet(voucherno: string) {
+  const res = await fetch(process.env.NEXT_PUBLIC_GAS_URL!, {
+    method: 'POST',
+    body: JSON.stringify({ action: "delete", voucherno }),
+  });
+  return res.json();
 }

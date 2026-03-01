@@ -123,7 +123,11 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       await sendBatchToSheet(itemList);
       setSubmitStatus('success');
       setItemList([]);
+      // ✅ Fix: submit ပြီးနောက် VoucherID, category, sub တွေ reset လုပ်မည်
       setVoucherno('');
+      setCategory('');
+      setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
+      setVendor('');
       onRefresh();
       setTimeout(() => setSubmitStatus('idle'), 3000);
     } catch (err) {

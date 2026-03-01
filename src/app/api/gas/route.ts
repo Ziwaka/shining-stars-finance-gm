@@ -54,38 +54,57 @@ export async function GET() {
   }
 }
 
-// ✅ Telegram ပို့သည် — item list မှ summary တစ်ကြိမ်တည်း
-async function sendTelegramSummary(items: any[]) {
+// ✅ Telegram ပို့သည်
+// newItems = ခုသွင်းတဲ့ batch
+// allVouchers = Sheet ထဲက ဟောင်းသောဒေတာ အကုန် (balance တွက်ရန်)
+async function sendTelegramSummary(newItems: any[], allVouchers: any[]) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     console.log('Telegram credentials missing');
     return;
   }
 
-  const totalIn  = items.filter(i => i.type === 'Cash In').reduce((s, i) => s + Number(i.cost_total || 0), 0);
-  const totalOut = items.filter(i => i.type !== 'Cash In').reduce((s, i) => s + Number(i.cost_total || 0), 0);
+  // ✅ Balance = Sheet ထဲက historical data အကုန် + ခုသွင်းတဲ့ batch
+  const combined = [...allVouchers, ...newItems];
+  const totalIn  = combined.filter(i => (i.type || '').toString().trim() === 'Cash In')
+                            .reduce((s, i) => s + Number(i.cost_total || i['cost_(total)'] || 0), 0);
+  const totalOut = combined.filter(i => (i.type || '').toString().trim() !== 'Cash In')
+                            .reduce((s, i) => s + Number(i.cost_total || i['cost_(total)'] || 0), 0);
   const balance  = totalIn - totalOut;
-  const date     = items[0]?.date || new Date().toISOString().split('T')[0];
 
-  const itemLines = items.map((i, idx) => {
-    const arrow = i.type === 'Cash In' ? '🟢' : '🔴';
+  // ✅ Today's batch summary
+  const batchIn  = newItems.filter(i => (i.type || '').toString().trim() === 'Cash In')
+                            .reduce((s, i) => s + Number(i.cost_total || 0), 0);
+  const batchOut = newItems.filter(i => (i.type || '').toString().trim() !== 'Cash In')
+                            .reduce((s, i) => s + Number(i.cost_total || 0), 0);
+
+  const date = newItems[0]?.date || new Date().toISOString().split('T')[0];
+
+  // ✅ Item lines — item_description မပါရင် fallback ပြမည်
+  const itemLines = newItems.map((i, idx) => {
+    const arrow = (i.type || '').trim() === 'Cash In' ? '🟢' : '🔴';
     const cat   = [i.category, i.sub1, i.sub2].filter(Boolean).join(' > ');
-    return `${arrow} *${idx + 1}. ${i.item_description || '-'}*\n` +
+    const desc  = i.item_description || i.item || '-';
+    const amt   = Number(i.cost_total || 0).toLocaleString();
+    return `${arrow} *${idx + 1}. ${desc}*\n` +
            `   📂 ${cat || 'GENERAL'}\n` +
            `   🏪 ${i.vendor || 'GENERAL'} | 👤 ${i.entered_by || 'GM'} (${i.account || 'GM ACCOUNT'})\n` +
-           `   💵 ${Number(i.cost_total || 0).toLocaleString()} MMK [${i.type}]` +
+           `   💵 ${amt} MMK [${i.type || 'Cash Out'}]` +
            (i.note ? `\n   📝 ${i.note}` : '');
   }).join('\n\n');
 
   const msg =
     `🏫 *SHINING STARS — FINANCE*\n` +
-    `🧾 *NEW TRANSACTION SUBMITTED*\n\n` +
+    `🧾 *NEW TRANSACTION — ${date}*\n\n` +
     itemLines + '\n\n' +
-    `📊 *TODAY'S SUMMARY — ${date}*\n` +
+    `📊 *THIS BATCH*\n` +
+    `🟢 In  : ${batchIn.toLocaleString()} MMK\n` +
+    `🔴 Out : ${batchOut.toLocaleString()} MMK\n\n` +
+    `💰 *ACCOUNT BALANCE*\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
-    `🟢 Cash In  : *${totalIn.toLocaleString()} MMK*\n` +
-    `🔴 Cash Out : *${totalOut.toLocaleString()} MMK*\n` +
+    `🟢 Total In  : ${totalIn.toLocaleString()} MMK\n` +
+    `🔴 Total Out : ${totalOut.toLocaleString()} MMK\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
-    `${balance >= 0 ? '✅' : '⚠️'} Balance   : *${balance >= 0 ? '+' : ''}${balance.toLocaleString()} MMK*`;
+    `${balance >= 0 ? '✅' : '⚠️'} *Balance : ${balance >= 0 ? '+' : ''}${balance.toLocaleString()} MMK*`;
 
   const telegramRes = await fetch(
     `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
@@ -112,9 +131,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action } = body;
 
-    // ✅ Telegram summary only — GAS ကို မခေါ်၊ Telegram ကိုသာ ပို့
+    // ✅ Telegram summary — cache ထဲက allVouchers နဲ့ တွဲတွက်မည်
     if (action === 'telegram_summary') {
-      await sendTelegramSummary(body.items || []);
+      const allVouchers = cache?.data?.vouchers || [];
+      await sendTelegramSummary(body.items || [], allVouchers);
       return NextResponse.json({ result: 'telegram_sent' });
     }
 
@@ -127,16 +147,15 @@ export async function POST(req: NextRequest) {
       const data = await res.json();
       cache = null;
 
-      // Delete notification
       sendTelegramSummary([{
-        type: 'Cash Out',
-        item_description: `🗑️ DELETED: ${body.voucherno}`,
-        category: 'DELETE', sub1: '', sub2: '',
+        type: 'DELETE',
+        item_description: `DELETED: ${body.voucherno}`,
+        category: '-', sub1: '', sub2: '',
         vendor: '-', entered_by: '-', account: '-',
         cost_total: 0,
         date: new Date().toISOString().split('T')[0],
-        note: `Voucher ${body.voucherno} ကို ဖျက်လိုက်သည်`,
-      }]).catch(() => {});
+        note: `Voucher ${body.voucherno} ဖျက်လိုက်သည်`,
+      }], []).catch(() => {});
 
       return NextResponse.json(data);
     }

@@ -63,48 +63,51 @@ async function sendTelegramSummary(newItems: any[], allVouchers: any[]) {
     return;
   }
 
-  // ✅ Balance = Sheet ထဲက historical data အကုန် + ခုသွင်းတဲ့ batch
+  // ✅ cost field normalize — GAS က cost_(total) လို့ပြန်လာတတ်တာကြောင့်
+  const getAmt = (v: any) => Number(v.cost_total || v['cost_(total)'] || 0);
+  const getType = (v: any) => (v.type || v.Type || 'Cash Out').toString().trim();
+
+  // ✅ Balance = Sheet ထဲက historical + ခုသွင်းတဲ့ batch
   const combined = [...allVouchers, ...newItems];
-  const totalIn  = combined.filter(i => (i.type || '').toString().trim() === 'Cash In')
-                            .reduce((s, i) => s + Number(i.cost_total || i['cost_(total)'] || 0), 0);
-  const totalOut = combined.filter(i => (i.type || '').toString().trim() !== 'Cash In')
-                            .reduce((s, i) => s + Number(i.cost_total || i['cost_(total)'] || 0), 0);
+  const totalIn  = combined.filter(v => getType(v) === 'Cash In').reduce((s, v) => s + getAmt(v), 0);
+  const totalOut = combined.filter(v => getType(v) !== 'Cash In').reduce((s, v) => s + getAmt(v), 0);
   const balance  = totalIn - totalOut;
 
-  // ✅ Today's batch summary
-  const batchIn  = newItems.filter(i => (i.type || '').toString().trim() === 'Cash In')
-                            .reduce((s, i) => s + Number(i.cost_total || 0), 0);
-  const batchOut = newItems.filter(i => (i.type || '').toString().trim() !== 'Cash In')
-                            .reduce((s, i) => s + Number(i.cost_total || 0), 0);
+  const date     = newItems[0]?.date || new Date().toISOString().split('T')[0];
+  const vrno     = newItems[0]?.voucherno || '-';
+  const vendor   = newItems[0]?.vendor || 'GENERAL';
+  const by       = newItems[0]?.entered_by || 'GM';
+  const account  = newItems[0]?.account || 'GM ACCOUNT';
 
-  const date = newItems[0]?.date || new Date().toISOString().split('T')[0];
-
-  // ✅ Item lines — item_description မပါရင် fallback ပြမည်
+  // ✅ Item list — Qty x Rate = Total format
   const itemLines = newItems.map((i, idx) => {
-    const arrow = (i.type || '').trim() === 'Cash In' ? '🟢' : '🔴';
-    const cat   = [i.category, i.sub1, i.sub2].filter(Boolean).join(' > ');
     const desc  = i.item_description || i.item || '-';
-    const amt   = Number(i.cost_total || 0).toLocaleString();
-    return `${arrow} *${idx + 1}. ${desc}*\n` +
-           `   📂 ${cat || 'GENERAL'}\n` +
-           `   🏪 ${i.vendor || 'GENERAL'} | 👤 ${i.entered_by || 'GM'} (${i.account || 'GM ACCOUNT'})\n` +
-           `   💵 ${amt} MMK [${i.type || 'Cash Out'}]` +
+    const qty   = Number(i.count || 1);
+    const rate  = Number(i.cost_piece || getAmt(i));
+    const total = Number(getAmt(i));
+    const arrow = getType(i) === 'Cash In' ? '🟢' : '🔴';
+    return `${arrow} ${idx + 1}. ${desc}\n` +
+           `   ${qty} x ${rate.toLocaleString()} = *${total.toLocaleString()} MMK*` +
            (i.note ? `\n   📝 ${i.note}` : '');
-  }).join('\n\n');
+  }).join('\n');
+
+  const grandTotal = newItems.reduce((s, i) => s + getAmt(i), 0);
 
   const msg =
     `🏫 *SHINING STARS — FINANCE*\n` +
-    `🧾 *NEW TRANSACTION — ${date}*\n\n` +
-    itemLines + '\n\n' +
-    `📊 *THIS BATCH*\n` +
-    `🟢 In  : ${batchIn.toLocaleString()} MMK\n` +
-    `🔴 Out : ${batchOut.toLocaleString()} MMK\n\n` +
-    `💰 *ACCOUNT BALANCE*\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
+    `🧾 *${vrno}*  |  📅 ${date}\n` +
+    `🏪 ${vendor}\n` +
+    `👤 ${by} (${account})\n` +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    itemLines + '\n' +
+    `━━━━━━━━━━━━━━━━━━\n` +
+    `💵 *GRAND TOTAL : ${grandTotal.toLocaleString()} MMK*\n\n` +
+    `💰 *ACCOUNT BALANCE*\n` +
     `🟢 Total In  : ${totalIn.toLocaleString()} MMK\n` +
     `🔴 Total Out : ${totalOut.toLocaleString()} MMK\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
-    `${balance >= 0 ? '✅' : '⚠️'} *Balance : ${balance >= 0 ? '+' : ''}${balance.toLocaleString()} MMK*`;
+    `${balance >= 0 ? '✅' : '⚠️'} *${balance >= 0 ? '+' : ''}${balance.toLocaleString()} MMK*`;
 
   const telegramRes = await fetch(
     `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,

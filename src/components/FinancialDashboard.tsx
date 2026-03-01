@@ -110,7 +110,8 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
     try {
       await deleteFromSheet(deleteModal.voucherno);
       setDeleteModal({ open: false, voucherno: '', confirmInput: '', loading: false });
-      if (onRefresh) onRefresh();
+      // ✅ GAS processing time အနည်းငယ်ပေးပြီးမှ refresh လုပ်မည်
+      setTimeout(() => { if (onRefresh) onRefresh(); }, 1500);
     } catch {
       setDeleteModal(m => ({ ...m, loading: false }));
       alert("FAILED TO DELETE TRANSACTION.");

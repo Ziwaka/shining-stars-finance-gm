@@ -9,6 +9,9 @@ let cache: { data: any; fetchedAt: number } | null = null;
 const CACHE_TTL = 120_000;
 let isFetching = false;
 
+// ✅ cache invalidate မလုပ်ခင် vouchers သိမ်းထားသည် — Telegram balance တွက်ရန်
+let lastKnownVouchers: any[] = [];
+
 async function fetchFromGAS(): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
@@ -34,7 +37,10 @@ export async function GET() {
   if (cache && isStale && !isFetching) {
     isFetching = true;
     fetchFromGAS()
-      .then(data => { cache = { data, fetchedAt: Date.now() }; })
+      .then(data => { 
+        cache = { data, fetchedAt: Date.now() };
+        if (data.vouchers) lastKnownVouchers = data.vouchers;
+      })
       .catch(() => {})
       .finally(() => { isFetching = false; });
     return NextResponse.json(cache.data, { headers: { 'X-Cache': 'STALE' } });
@@ -43,6 +49,7 @@ export async function GET() {
     isFetching = true;
     const data = await fetchFromGAS();
     cache = { data, fetchedAt: Date.now() };
+    if (data.vouchers) lastKnownVouchers = data.vouchers;
     return NextResponse.json(data, { headers: { 'X-Cache': 'MISS' } });
   } catch (err: any) {
     return NextResponse.json(
@@ -136,8 +143,8 @@ export async function POST(req: NextRequest) {
 
     // ✅ Telegram summary — cache ထဲက allVouchers နဲ့ တွဲတွက်မည်
     if (action === 'telegram_summary') {
-      const allVouchers = cache?.data?.vouchers || [];
-      await sendTelegramSummary(body.items || [], allVouchers);
+      // ✅ lastKnownVouchers သုံးသည် — cache invalidate ဖြစ်ပြီးနောက်လည်း historical data ရနိုင်မည်
+      await sendTelegramSummary(body.items || [], lastKnownVouchers);
       return NextResponse.json({ result: 'telegram_sent' });
     }
 

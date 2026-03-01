@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
-import { sendToSheet } from '@/lib/api';
+import { sendBatchToSheet } from '@/lib/api';
 import { Plus, Trash2, Save, RefreshCcw, Camera, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertTriangle, MessageSquare, Hash, Banknote, Search, User, Wallet, BellRing } from 'lucide-react';
 
 export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
@@ -119,9 +119,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     if (itemList.length === 0 || submitStatus === 'processing') return;
     setSubmitStatus('processing');
     try {
-      for (const item of itemList) {
-        await sendToSheet(item); // ✅ sendToSheet ထဲမှာ Telegram noti ပါ server-side မှ ပေးပို့ပြီ
-      }
+      // ✅ Batch တစ်ခါတည်း submit — Telegram summary တစ်ကြိမ်သာ ပေးပို့မည်
+      await sendBatchToSheet(itemList);
       setSubmitStatus('success');
       setItemList([]);
       setVoucherno('');

@@ -68,11 +68,11 @@ async function sendTelegramSummary(items: any[]) {
 
   const itemLines = items.map((i, idx) => {
     const arrow = i.type === 'Cash In' ? '🟢' : '🔴';
-    const cat   = [i.category, i.sub1, i.sub2].filter(Boolean).join(' › ');
+    const cat   = [i.category, i.sub1, i.sub2].filter(Boolean).join(' > ');
     return `${arrow} *${idx + 1}. ${i.item_description || '-'}*\n` +
            `   📂 ${cat || 'GENERAL'}\n` +
-           `   🏪 ${i.vendor || 'GENERAL'}  |  👤 ${i.entered_by || 'GM'} \\(${i.account || 'GM ACCOUNT'}\\)\n` +
-           `   💵 ${Number(i.cost_total || 0).toLocaleString()} MMK  \\[${i.type}\\]` +
+           `   🏪 ${i.vendor || 'GENERAL'} | 👤 ${i.entered_by || 'GM'} (${i.account || 'GM ACCOUNT'})\n` +
+           `   💵 ${Number(i.cost_total || 0).toLocaleString()} MMK [${i.type}]` +
            (i.note ? `\n   📝 ${i.note}` : '');
   }).join('\n\n');
 
@@ -95,7 +95,7 @@ async function sendTelegramSummary(items: any[]) {
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
         text: msg,
-        parse_mode: 'MarkdownV2',
+        parse_mode: 'Markdown',
       }),
     }
   );

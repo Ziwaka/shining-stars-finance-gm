@@ -8,6 +8,8 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 let cache: { data: any; fetchedAt: number } | null = null;
 const CACHE_TTL = 120_000;
 let isFetching = false;
+// ✅ delete/send ပြီးနောက် GET ကို force fresh fetch ဖြစ်အောင်
+let forceRefresh = false;
 
 // ✅ cache invalidate မလုပ်ခင် vouchers သိမ်းထားသည် — Telegram balance တွက်ရန်
 let lastKnownVouchers: any[] = [];
@@ -29,7 +31,7 @@ async function fetchFromGAS(): Promise<any> {
 // GET — stale-while-revalidate
 export async function GET() {
   const now = Date.now();
-  const isStale = !cache || (now - cache.fetchedAt) > CACHE_TTL;
+  const isStale = !cache || (now - cache.fetchedAt) > CACHE_TTL || forceRefresh;
 
   if (cache && !isStale) {
     return NextResponse.json(cache.data, { headers: { 'X-Cache': 'HIT' } });
@@ -39,6 +41,7 @@ export async function GET() {
     fetchFromGAS()
       .then(data => { 
         cache = { data, fetchedAt: Date.now() };
+        forceRefresh = false;
         if (data.vouchers) lastKnownVouchers = data.vouchers;
       })
       .catch(() => {})
@@ -49,6 +52,7 @@ export async function GET() {
     isFetching = true;
     const data = await fetchFromGAS();
     cache = { data, fetchedAt: Date.now() };
+    forceRefresh = false;
     if (data.vouchers) lastKnownVouchers = data.vouchers;
     return NextResponse.json(data, { headers: { 'X-Cache': 'MISS' } });
   } catch (err: any) {
@@ -155,7 +159,11 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({ action: 'delete', voucherno: body.voucherno }),
       });
       const data = await res.json();
+      // ✅ cache null + lastKnownVouchers ထဲကလည်း ဖျက်ထားသော voucher ကို ဖြုတ်ပါ
       cache = null;
+      lastKnownVouchers = lastKnownVouchers.filter(
+        v => (v.voucherno || v.voucher_no || '').toString() !== body.voucherno
+      );
 
       sendTelegramSummary([{
         type: 'DELETE',
@@ -177,7 +185,11 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify(body.data),
       });
       const data = await res.json();
+      // ✅ cache null + forceRefresh — နောက် GET request မှာ GAS ကနေ fresh data ယူမည်
       cache = null;
+      forceRefresh = true;
+      // ✅ lastKnownVouchers မှာ ခုသွင်းတဲ့ item ထည့်ထားသည် — Telegram balance တွက်ရန်
+      lastKnownVouchers = [...lastKnownVouchers, body.data];
       return NextResponse.json(data);
     }
 

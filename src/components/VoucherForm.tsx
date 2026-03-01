@@ -10,47 +10,40 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [voucherno, setVoucherno] = useState('');
   const [image, setImage] = useState<string>('');
   const [itemList, setItemList] = useState<any[]>([]);
+  
   const [enteredBy, setEnteredBy] = useState('GM');
   const [account, setAccount] = useState('GM ACCOUNT');
+
+  // ✅ /api/gas မှ fetch — GAS URL client-side မထွက်တော့
   const [config, setConfig] = useState<any>({ categoryList: [], prefixes: {}, lastSerials: {}, suppliers: [], recentItems: [], users: [], accounts: [] });
   
-  const [currentBalance, setCurrentBalance] = useState(0);
-
   const [category, setCategory] = useState('');
   const [sub1, setSub1] = useState('');
   const [sub2, setSub2] = useState('');
   const [sub3, setSub3] = useState('');
   const [sub4, setSub4] = useState('');
   const [sub5, setSub5] = useState('');
+
   const [currentItem, setCurrentItem] = useState({ item_description: '', count: '' as any, cost_piece: '' as any, note: '' });
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [toastMsg, setToastMsg] = useState('');
 
   useEffect(() => {
-    const noCacheUrl = `${process.env.NEXT_PUBLIC_GAS_URL}?t=${new Date().getTime()}`;
-    fetch(noCacheUrl)
+    // ✅ /api/gas route မှတဆင့် — GAS URL browser မမြင်နိုင်
+    fetch('/api/gas')
       .then(res => res.json())
       .then(data => {
         setConfig({
           categoryList: data.categoryList || data.tree || [],
-          prefixes: data.prefixes || {}, lastSerials: data.lastSerials || {},
-          suppliers: data.suppliers || [], recentItems: data.recentItems || [],
-          users: data.users || [], accounts: data.accounts || []
+          prefixes: data.prefixes || {},
+          lastSerials: data.lastSerials || {},
+          suppliers: data.suppliers || [],
+          recentItems: data.recentItems || [],
+          users: data.users || [],
+          accounts: data.accounts || []
         });
-
         if (data.users && data.users.length > 0) setEnteredBy(String(data.users[0]));
         if (data.accounts && data.accounts.length > 0) setAccount(String(data.accounts[0]));
-
-        if (data.vouchers && data.vouchers.length > 0) {
-          let bal = 0;
-          data.vouchers.forEach((v: any) => {
-            const amt = Number(v.cost_total || v['cost_(total)'] || 0);
-            const vType = (v.type || v.Type || "Cash Out").toString().trim();
-            if (vType === "Cash In") bal += amt;
-            else bal -= amt;
-          });
-          setCurrentBalance(bal);
-        }
       })
       .catch(err => console.error("Failed to fetch config:", err));
   }, []);
@@ -62,113 +55,123 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const sub4Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3).map((row: any) => String(row.Sub_4 || row.sub4 || '')))).filter(Boolean), [sub3, config.categoryList, category, sub1, sub2]);
   const sub5Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3 && String(row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean), [sub4, config.categoryList, category, sub1, sub2, sub3]);
 
-  const generateVrID = (cat: string, currentBatch: any[]) => {
+  // ✅ Bug Fix: ID ကို generate ပြီးမှ return ပြန်သည် — item ထဲ မဝင်ခင် သတ်မှတ်နိုင်ရန်
+  const generateVrID = (cat: string, currentBatch: any[]): string => {
     const prefix = type === 'Cash In' ? 'INC' : (config.prefixes[cat] || "EXP");
     const lastNum = config.lastSerials[prefix] || 0;
     const inBatchCount = currentBatch.filter(i => String(i.voucherno).startsWith(prefix)).length;
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
     const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
-    setVoucherno(`${prefix}-${month}-${nextNum}`);
+    const newId = `${prefix}-${month}-${nextNum}`;
+    setVoucherno(newId);
+    return newId;
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image(); img.onload = () => {
+      const img = new Image();
+      img.onload = () => {
         const canvas = document.createElement('canvas');
         let width = img.width; let height = img.height;
         if (width > height) { if (width > 800) { height *= 800 / width; width = 800; } } else { if (height > 800) { width *= 800 / height; height = 800; } }
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
         setImage(canvas.toDataURL('image/jpeg', 0.7));
-      }; img.src = event.target?.result as string;
-    }; reader.readAsDataURL(file);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const addItem = () => {
-    const countNum = parseFloat(currentItem.count); const costNum = parseInt(currentItem.cost_piece); 
+    const countNum = parseFloat(currentItem.count);
+    const costNum = parseInt(currentItem.cost_piece);
     if (!vendor || !currentItem.item_description || isNaN(countNum)) return alert("REQUIRED: VENDOR, ITEM & QTY");
+    
     const total = Math.round(countNum * costNum);
-    const newItem = { date, entered_by: enteredBy, account, vendor, type, voucherno, category, sub1, sub2, sub3, sub4, sub5, item_description: currentItem.item_description, note: currentItem.note, count: countNum, cost_piece: costNum, cost_total: total, image_data: image, id: Date.now() };
+
+    // ✅ Bug Fix: ID ကို addItem မှာ ကြိုတင် generate ပြီး item ထဲ ထည့်သည်
+    const generatedId = generateVrID(category, itemList);
+
+    const newItem = {
+      date, entered_by: enteredBy, account, vendor, type,
+      voucherno: generatedId, // ✅ ပြည့်စုံသော ID ဖြင့် သိမ်းသည်
+      category, sub1, sub2, sub3, sub4, sub5,
+      item_description: currentItem.item_description, note: currentItem.note,
+      count: countNum, cost_piece: costNum, cost_total: total, image_data: image, id: Date.now()
+    };
+    
     const updatedList = [...itemList, newItem];
-    setItemList(updatedList); generateVrID(category, updatedList);
-    setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`); setTimeout(() => setToastMsg(''), 3000);
-    setCurrentItem({ item_description: '', count: '', cost_piece: '', note: '' }); setImage('');
+    setItemList(updatedList);
+
+    setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`);
+    setTimeout(() => setToastMsg(''), 3000);
+    setCurrentItem({ item_description: '', count: '', cost_piece: '', note: '' });
+    setImage('');
   };
 
-  // 🔴 ဝင်ငွေ/အသုံးစရိတ်ပေါ်မူတည်၍ Emoji များ ကွဲပြားအောင် ပြင်ဆင်ထားခြင်း 🔴
-  const sendTelegramNotification = async (items: any[]) => {
-    const botToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN; const chatId = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID;
-    if (!botToken || !chatId) return; 
-    try {
-      const totalAmt = items.reduce((s, x) => s + x.cost_total, 0);
-      const newBalance = type === 'Cash In' ? currentBalance + totalAmt : currentBalance - totalAmt;
-      
-      const headerEmoji = type === 'Cash In' ? '🟢' : '🔴';
-      const typeLabel = type === 'Cash In' ? 'CASH IN (ဝင်ငွေ)' : 'CASH OUT (အသုံးစရိတ်)';
-
-      let msg = `${headerEmoji} *NEW TRANSACTION SUBMITTED*\n\n`;
-      msg += `📅 *Date:* ${date}\n`;
-      msg += `👤 *By:* ${enteredBy}\n`;
-      msg += `💳 *Account:* ${account}\n`;
-      msg += `📈 *Type:* ${typeLabel}\n`;
-      msg += `--------------------------------\n\n`;
-
-      items.forEach((item, index) => {
-        msg += `*${index + 1}. ${item.item_description}*\n`;
-        msg += `   📂 Cat: ${item.category} ${item.sub1 ? '> '+item.sub1 : ''}\n`;
-        msg += `   🆔 ID: ${item.voucherno}\n`;
-        if(item.vendor) msg += `   🏢 Vendor: ${item.vendor}\n`;
-        msg += `   💵 Amt: ${item.count} x ${item.cost_piece.toLocaleString()} = *${item.cost_total.toLocaleString()} MMK*\n`;
-        if(item.note) msg += `   📝 Note: ${item.note}\n`;
-        msg += `\n`;
-      });
-
-      msg += `--------------------------------\n`;
-      msg += `💰 *BATCH TOTAL:* ${totalAmt.toLocaleString()} MMK\n`;
-      msg += `🏦 *NEW BALANCE: ${newBalance.toLocaleString()} MMK*`;
-
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'Markdown' }) });
-    } catch (e) { console.error("Telegram Noti Failed", e); }
-  };
+  // ✅ Telegram notification ကို server-side (api/gas) မှ ပေးပို့သောကြောင့် ဒီမှာ မလိုတော့ပါ
 
   const handleFinalSubmit = async () => {
-    if (itemList.length === 0 || submitStatus === 'processing') return; 
-    setSubmitStatus('processing'); 
+    if (itemList.length === 0 || submitStatus === 'processing') return;
+    setSubmitStatus('processing');
     try {
-      for (const item of itemList) { await sendToSheet(item); }
-      await sendTelegramNotification(itemList); 
-      setSubmitStatus('success'); setItemList([]); onRefresh();
+      for (const item of itemList) {
+        await sendToSheet(item); // ✅ sendToSheet ထဲမှာ Telegram noti ပါ server-side မှ ပေးပို့ပြီ
+      }
+      setSubmitStatus('success');
+      setItemList([]);
+      setVoucherno('');
+      onRefresh();
       setTimeout(() => setSubmitStatus('idle'), 3000);
-    } catch (err) { setSubmitStatus('error'); setTimeout(() => setSubmitStatus('idle'), 3000); }
+    } catch (err) {
+      setSubmitStatus('error');
+      setTimeout(() => setSubmitStatus('idle'), 3000);
+    }
   };
 
   return (
     <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950 uppercase">
+      
       {toastMsg && (
         <div className="absolute top-4 right-4 bg-emerald-50 border border-emerald-200 text-slate-950 p-4 rounded-xl shadow-lg flex items-center gap-3 z-50 animate-bounce font-black">
-          <BellRing size={20} className="text-emerald-600" /> {toastMsg}
+          <BellRing size={20} className="text-emerald-600" />
+          {toastMsg}
         </div>
       )}
 
+      {/* INPUT PANEL */}
       <div className="lg:col-span-8 p-6 space-y-6 border-r border-slate-200 font-black">
+        
         <div className="flex flex-wrap items-center gap-4 bg-slate-50 border border-slate-200 p-2 rounded-2xl w-fit font-black">
           <div className="flex">
             <button onClick={() => { setType('Cash Out'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
             <button onClick={() => { setType('Cash In'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash In' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowUpRight size={16} className="mr-2"/> CASH IN</button>
           </div>
           <div className="h-6 w-[2px] bg-slate-300"></div>
+          
           <div className="flex items-center gap-2 px-2">
             <User size={16} className="text-slate-500"/>
             <select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={enteredBy} onChange={e => setEnteredBy(e.target.value)}>
-              {config.users && config.users.length > 0 ? (config.users.map((u: any, i: number) => <option key={`user-${i}`} value={String(u)}>{String(u)}</option>)) : (<><option value="GM">GM</option><option value="FOUNDER">FOUNDER</option></>)}
+              {config.users && config.users.length > 0 ? (
+                config.users.map((u: any, i: number) => <option key={`user-${i}`} value={String(u)}>{String(u)}</option>)
+              ) : (
+                <><option value="GM">GM</option><option value="FOUNDER">FOUNDER</option></>
+              )}
             </select>
           </div>
+          
           <div className="flex items-center gap-2 px-2 border-l-2 border-slate-300 pl-4">
             <Wallet size={16} className="text-slate-500"/>
             <select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={account} onChange={e => setAccount(e.target.value)}>
-              {config.accounts && config.accounts.length > 0 ? (config.accounts.map((a: any, i: number) => <option key={`acc-${i}`} value={String(a)}>{String(a)}</option>)) : (<><option value="GM ACCOUNT">GM ACCOUNT</option><option value="FOUNDER ACCOUNT">FOUNDER ACCOUNT</option></>)}
+              {config.accounts && config.accounts.length > 0 ? (
+                config.accounts.map((a: any, i: number) => <option key={`acc-${i}`} value={String(a)}>{String(a)}</option>)
+              ) : (
+                <><option value="GM ACCOUNT">GM ACCOUNT</option><option value="FOUNDER ACCOUNT">FOUNDER ACCOUNT</option></>
+              )}
             </select>
           </div>
         </div>

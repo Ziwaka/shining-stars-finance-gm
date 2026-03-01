@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useState, useMemo } from 'react';
-import { Printer, ChevronLeft, RefreshCcw, FileSpreadsheet, Calendar, Filter, ArrowRight } from 'lucide-react';
+import { Printer, ChevronLeft, RefreshCcw, FileSpreadsheet, Calendar, Filter, ArrowRight, WifiOff } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -15,13 +15,25 @@ export default function ReportPage() {
 
   useEffect(() => {
     const fetchReportData = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const noCacheUrl = `${process.env.NEXT_PUBLIC_GAS_URL}?t=${Date.now()}`;
-        const res = await fetch(noCacheUrl);
-        const text = await res.text();
-        const result = JSON.parse(text);
+        // ✅ timeout 15s ထည့်ထားသောကြောင့် GAS slow ဖြစ်ရင်လည်း stuck မဖြစ်တော့ပါ
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch('/api/gas', { signal: controller.signal });
+        clearTimeout(timeout);
+        const result = await res.json();
         setVouchers(result.vouchers || []);
-      } catch (err) { setError("Network Connection Failed."); } finally { setLoading(false); }
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          setError("Connection timeout — Google Sheet တုံ့ပြန်မှု နှောင့်နှေးသည်။ ပြန်ကြိုးစားပါ။");
+        } else {
+          setError("ချိတ်ဆက်မှု မအောင်မြင်ပါ။ Internet စစ်ပြီး ပြန်ကြိုးစားပါ။");
+        }
+      } finally {
+        setLoading(false);
+      }
     };
     fetchReportData();
   }, []);
@@ -32,7 +44,6 @@ export default function ReportPage() {
       const cleanDate = rawDate.toString().split('T')[0];
       const rawAmount = v['cost_(total)'] || v.cost_total || 0;
       const itemName = v.item_description || v['item_description'] || v.item || '';
-
       return {
         date: cleanDate,
         voucherno: v.voucher_no || v.voucherno || '',
@@ -59,7 +70,7 @@ export default function ReportPage() {
     return normalizedVouchers.filter(v => {
       const dateMatch = (!startDate || v.date >= startDate) && (!endDate || v.date <= endDate);
       const categoryMatch = !selectedCategory || v.category === selectedCategory;
-      return dateMatch && categoryMatch; 
+      return dateMatch && categoryMatch;
     });
   }, [normalizedVouchers, startDate, endDate, selectedCategory]);
 
@@ -78,9 +89,28 @@ export default function ReportPage() {
     }, 0);
   }, [filteredVouchers]);
 
+  // ✅ Loading state — spinner + back button ပါသည်
   if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 font-black text-slate-950 uppercase">
-      <RefreshCcw className="animate-spin mb-4 text-slate-950" size={48} /><p className="tracking-[0.3em] font-black text-slate-950">Generating Report...</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 font-black text-slate-950 uppercase gap-8">
+      <RefreshCcw className="animate-spin text-slate-950" size={48} />
+      <p className="tracking-[0.3em] font-black text-slate-950 text-sm">LOADING REPORT DATA...</p>
+      <Link href="/" className="text-xs text-slate-500 underline tracking-widest font-black">← BACK TO DASHBOARD</Link>
+    </div>
+  );
+
+  // ✅ Error state — retry button ပါသည်
+  if (error) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 font-black text-slate-950 uppercase gap-6 p-8">
+      <WifiOff size={48} className="text-rose-400" />
+      <p className="text-sm font-black text-center text-rose-700 max-w-sm">{error}</p>
+      <div className="flex gap-4">
+        <button onClick={() => window.location.reload()} className="bg-slate-950 text-white px-8 py-3 rounded-2xl text-xs font-black hover:bg-slate-800 transition-all">
+          RETRY
+        </button>
+        <Link href="/" className="bg-slate-200 text-slate-950 px-8 py-3 rounded-2xl text-xs font-black hover:bg-slate-300 transition-all">
+          BACK
+        </Link>
+      </div>
     </div>
   );
 
@@ -117,7 +147,6 @@ export default function ReportPage() {
             <div className="space-y-4 print:space-y-1 font-black">
               <h1 className="text-4xl print:text-[16pt] tracking-tighter leading-none font-black text-slate-950">SHINING STARS - MA THWE</h1>
               <h2 className="text-slate-600 text-sm print:text-[10pt] tracking-[0.5em] font-black print:mt-0.5">PRIVATE HIGH SCHOOL</h2>
-              
               <div className="pt-6 print:pt-2 flex flex-col print:flex-row print:gap-8 space-y-1 print:space-y-0 text-[10px] print:text-[9pt] text-slate-500 tracking-widest font-black uppercase">
                 <p>REPORT DATE: {new Date().toLocaleDateString()}</p>
                 <p>RANGE: {startDate || 'START'} TO {endDate || 'PRESENT'}</p>
@@ -135,7 +164,6 @@ export default function ReportPage() {
                 <h3 className="text-lg print:text-[11pt] tracking-widest font-black text-slate-950">{cat}</h3>
                 <FileSpreadsheet size={20} className="text-slate-400 print:hidden" />
               </div>
-              
               <table className="w-full border-collapse font-black">
                 <thead>
                   <tr className="bg-slate-50 border-b-4 border-slate-300 text-[10px] print:text-[9pt] text-slate-600 font-black uppercase">
@@ -154,22 +182,18 @@ export default function ReportPage() {
                       <td className="py-4 print:py-1 px-3 print:px-1 font-black">
                         <div className="text-sm print:text-[10pt] leading-tight mb-2 print:mb-0.5 font-black text-slate-950 flex items-center gap-2">
                            {v.item}
-                           {v.type === 'Cash In' && <span className="text-[8px] bg-slate-200 text-slate-950 px-1 py-0.5 rounded print:border print:border-slate-300 border-none">IN</span>}
+                           {v.type === 'Cash In' && <span className="text-[8px] bg-slate-200 text-slate-950 px-1 py-0.5 rounded">IN</span>}
                         </div>
                         <div className="text-[9px] print:text-[9pt] text-slate-500 font-black flex flex-wrap gap-1 items-center">
-                          <span className="bg-white border border-slate-300 print:bg-transparent print:text-slate-950 print:border print:border-slate-300 px-2 print:px-1 py-1 print:py-0 rounded-md print:rounded-none text-slate-950">{v.vendor || 'GENERAL'}</span>
+                          <span className="bg-white border border-slate-300 px-2 py-1 rounded-md text-slate-950">{v.vendor || 'GENERAL'}</span>
                           <span className="text-slate-400">|</span>
                           <span className="text-slate-700">{v.account} ({v.entered_by})</span>
                           {[v.sub1, v.sub2, v.sub3, v.sub4, v.sub5].filter(Boolean).map((sub, i) => (
-                            <span key={i} className="flex items-center">
-                              <span className="text-slate-400 mx-1">/</span>
-                              {sub}
-                            </span>
+                            <span key={i} className="flex items-center"><span className="text-slate-400 mx-1">/</span>{sub}</span>
                           ))}
                         </div>
-                        
                         {v.note && (
-                          <div className="mt-2 print:mt-0.5 p-2 print:p-0.5 bg-slate-50 print:bg-transparent text-slate-700 text-[10px] print:text-[9pt] rounded-xl print:rounded-none border-l-2 print:border-l border-slate-300 font-black w-fit max-w-full print:italic">
+                          <div className="mt-2 print:mt-0.5 p-2 bg-slate-50 text-slate-700 text-[10px] rounded-xl border-l-2 border-slate-300 font-black w-fit max-w-full print:italic">
                             📝 {v.note}
                           </div>
                         )}
@@ -181,8 +205,8 @@ export default function ReportPage() {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-100 print:bg-slate-200 text-slate-950 font-black border-t-4 border-slate-300">
-                    <td colSpan={2} className="p-4 print:p-1 text-right text-xs print:text-[10pt] tracking-widest uppercase font-black text-slate-600">SUB-TOTAL ({cat})</td>
+                  <tr className="bg-slate-100 text-slate-950 font-black border-t-4 border-slate-300">
+                    <td colSpan={2} className="p-4 print:p-1 text-right text-xs tracking-widest uppercase font-black text-slate-600">SUB-TOTAL ({cat})</td>
                     <td className="p-4 print:p-1 text-right text-xl print:text-[12pt] font-black">
                       {groupedData[cat].reduce((s: number, i: any) => i.type === 'Cash In' ? s + i.cost_total : s - i.cost_total, 0).toLocaleString()}
                     </td>
@@ -191,22 +215,22 @@ export default function ReportPage() {
               </table>
             </div>
           )) : (
-            <div className="text-center py-40 print:py-6 text-slate-400 font-black border-4 border-dashed border-slate-200 rounded-[3rem] uppercase print:text-[12pt]">
+            <div className="text-center py-40 print:py-6 text-slate-400 font-black border-4 border-dashed border-slate-200 rounded-[3rem] uppercase">
               NO RECORDS FOUND FOR THE SELECTED RANGE
             </div>
           )}
 
           <div className="mt-16 print:mt-6 pt-8 print:pt-2 border-t-8 print:border-t-4 border-slate-950 bg-slate-50 print:bg-transparent p-10 print:p-2 flex justify-between items-center rounded-3xl print:rounded-none font-black break-inside-avoid">
-            <span className="text-xl print:text-[12pt] tracking-[0.4em] print:tracking-widest text-slate-600 font-black uppercase">NET BALANCE LEDGER</span>
+            <span className="text-xl print:text-[12pt] tracking-[0.4em] text-slate-600 font-black uppercase">NET BALANCE LEDGER</span>
             <span className={`text-6xl print:text-[16pt] font-black ${grandTotal < 0 ? 'text-rose-600' : 'text-slate-950'}`}>
-              {grandTotal < 0 ? '-' : '+'} {Math.abs(grandTotal).toLocaleString()} <span className="text-sm print:text-[10pt] opacity-50 font-black text-slate-500">MMK</span>
+              {grandTotal < 0 ? '-' : '+'} {Math.abs(grandTotal).toLocaleString()} <span className="text-sm opacity-50 font-black text-slate-500">MMK</span>
             </span>
           </div>
 
-          <div className="mt-32 print:mt-12 grid grid-cols-3 gap-20 print:gap-10 text-center text-[10px] print:text-[10pt] tracking-widest font-black uppercase break-inside-avoid text-slate-600">
-            <div className="space-y-24 print:space-y-8 font-black"><div className="h-[3px] print:h-[1px] bg-slate-950 w-full"></div><span>ACCOUNTANT SIGNATURE</span></div>
-            <div className="space-y-24 print:space-y-8 font-black"><div className="h-[3px] print:h-[1px] bg-slate-950 w-full"></div><span>OFFICE VERIFIED</span></div>
-            <div className="space-y-24 print:space-y-8 font-black"><div className="h-[3px] print:h-[1px] bg-slate-950 w-full"></div><span>APPROVED BY</span></div>
+          <div className="mt-32 print:mt-12 grid grid-cols-3 gap-20 print:gap-10 text-center text-[10px] tracking-widest font-black uppercase break-inside-avoid text-slate-600">
+            <div className="space-y-24 print:space-y-8 font-black"><div className="h-[3px] bg-slate-950 w-full"></div><span>ACCOUNTANT SIGNATURE</span></div>
+            <div className="space-y-24 print:space-y-8 font-black"><div className="h-[3px] bg-slate-950 w-full"></div><span>OFFICE VERIFIED</span></div>
+            <div className="space-y-24 print:space-y-8 font-black"><div className="h-[3px] bg-slate-950 w-full"></div><span>APPROVED BY</span></div>
           </div>
         </div>
       </div>
@@ -215,7 +239,7 @@ export default function ReportPage() {
         @media print {
           .no-print { display: none !important; }
           body { background: white !important; padding: 0 !important; margin: 0 !important; }
-          @page { size: A4 landscape; margin: 10mm; } 
+          @page { size: A4 landscape; margin: 10mm; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>

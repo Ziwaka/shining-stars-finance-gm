@@ -2,14 +2,20 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2 } from 'lucide-react';
+import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2, ShieldAlert } from 'lucide-react';
 import { deleteFromSheet } from '@/lib/api';
 
 const COLORS = ['#cbd5e1', '#e2e8f0', '#f1f5f9', '#94a3b8', '#64748b', '#475569', '#cbd5e1', '#f1f5f9'];
 
-export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] }) {
+export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouchers: any[], onRefresh?: () => void }) {
   const [filter, setFilter] = useState({ startDate: '', endDate: '', category: '', item: '', vendor: '' });
   const [selectedImg, setSelectedImg] = useState<string | null>(null);
+
+  // ✅ Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean; voucherno: string; confirmInput: string; loading: boolean;
+  }>({ open: false, voucherno: '', confirmInput: '', loading: false });
+
 
   const normalizedData = useMemo(() => {
     return (vouchers || []).map(v => {
@@ -92,13 +98,22 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
     return { totalIn, totalOut, balance: totalIn - totalOut, categories: Object.keys(catGroup).map(name => ({ name, value: catGroup[name] })), trends: Object.values(trendGroup).sort((a:any, b:any) => new Date(a.date).getTime() - new Date(b.date).getTime()) };
   }, [filtered]);
 
-  const handleDelete = async (voucherno: string) => {
-    if(confirm(`⚠️ WARNING: ARE YOU SURE YOU WANT TO PERMANENTLY DELETE VOUCHER ${voucherno}?`)) {
-      try {
-        await deleteFromSheet(voucherno);
-        alert("TRANSACTION DELETED SUCCESSFULLY.");
-        window.location.reload();
-      } catch (err) { alert("FAILED TO DELETE TRANSACTION."); }
+  // ✅ Modal ဖွင့်ရုံ — browser confirm() မသုံးတော့
+  const handleDelete = (voucherno: string) => {
+    setDeleteModal({ open: true, voucherno, confirmInput: '', loading: false });
+  };
+
+  // ✅ Voucher ID တိုက်ကိုက်မှသာ delete လုပ်မည်
+  const confirmDelete = async () => {
+    if (deleteModal.confirmInput !== deleteModal.voucherno) return;
+    setDeleteModal(m => ({ ...m, loading: true }));
+    try {
+      await deleteFromSheet(deleteModal.voucherno);
+      setDeleteModal({ open: false, voucherno: '', confirmInput: '', loading: false });
+      if (onRefresh) onRefresh();
+    } catch {
+      setDeleteModal(m => ({ ...m, loading: false }));
+      alert("FAILED TO DELETE TRANSACTION.");
     }
   };
 
@@ -278,6 +293,79 @@ export default function FinancialDashboard({ vouchers = [] }: { vouchers: any[] 
         <div className="fixed inset-0 bg-slate-900/90 z-[9999] flex items-center justify-center p-6 backdrop-blur-sm print:hidden" onClick={() => setSelectedImg(null)}>
           <button className="absolute top-6 right-6 text-white hover:text-slate-300 font-black"><X size={32}/></button>
           <img src={selectedImg} className="max-w-full max-h-full rounded-2xl border-4 border-white shadow-xl" alt="Proof" />
+        </div>
+      )}
+
+      {/* ✅ Delete Confirmation Modal */}
+      {deleteModal.open && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[9999] flex items-center justify-center p-6 backdrop-blur-sm print:hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6 border border-rose-200">
+
+            {/* Header */}
+            <div className="flex items-center gap-4">
+              <div className="bg-rose-100 p-3 rounded-2xl">
+                <ShieldAlert size={28} className="text-rose-600" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-slate-950 uppercase tracking-widest">Confirm Delete</h2>
+                <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-0.5">ဤလုပ်ဆောင်ချက်ကို ပြန်မဖြေဖြစ်နိုင်ပါ</p>
+              </div>
+            </div>
+
+            {/* Voucher details */}
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-1">
+              <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Voucher ဖျက်မည်</p>
+              <p className="text-xl font-black text-rose-700 tracking-widest">{deleteModal.voucherno}</p>
+            </div>
+
+            {/* Confirm input */}
+            <div className="space-y-2">
+              <label className="text-[10px] text-slate-500 uppercase tracking-widest font-black">
+                အတည်ပြုရန် Voucher ID ကို ရိုက်ထည့်ပါ
+              </label>
+              <input
+                autoFocus
+                type="text"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-300 rounded-2xl text-sm font-black text-slate-950 uppercase outline-none focus:border-rose-400 tracking-widest transition-all"
+                placeholder={deleteModal.voucherno}
+                value={deleteModal.confirmInput}
+                onChange={e => setDeleteModal(m => ({ ...m, confirmInput: e.target.value.toUpperCase() }))}
+                onKeyDown={e => e.key === 'Enter' && confirmDelete()}
+              />
+              {deleteModal.confirmInput.length > 0 && deleteModal.confirmInput !== deleteModal.voucherno && (
+                <p className="text-[10px] text-rose-500 font-black uppercase tracking-widest">✗ ID မတူပါ</p>
+              )}
+              {deleteModal.confirmInput === deleteModal.voucherno && (
+                <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">✓ ID တူပါသည်</p>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setDeleteModal({ open: false, voucherno: '', confirmInput: '', loading: false })}
+                className="flex-1 py-4 bg-slate-100 text-slate-950 rounded-2xl text-xs font-black uppercase hover:bg-slate-200 transition-all border border-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleteModal.confirmInput !== deleteModal.voucherno || deleteModal.loading}
+                className={`flex-1 py-4 rounded-2xl text-xs font-black uppercase transition-all flex items-center justify-center gap-2 ${
+                  deleteModal.confirmInput === deleteModal.voucherno && !deleteModal.loading
+                    ? 'bg-rose-600 text-white hover:bg-rose-700 shadow-md'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                {deleteModal.loading ? (
+                  <><span className="animate-spin">⟳</span> Deleting...</>
+                ) : (
+                  <><Trash2 size={14}/> Permanent Delete</>
+                )}
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
     </div>

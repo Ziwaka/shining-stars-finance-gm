@@ -1,6 +1,6 @@
 "use client"
-import React, { useState, useEffect } from 'react';
-import { Wifi, Cpu, CheckCircle2, Plus, ArrowRight, Landmark } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Wifi, Cpu, CheckCircle2, Plus, ArrowRight, Landmark, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import FinancialDashboard from '@/components/FinancialDashboard';
@@ -9,23 +9,37 @@ export default function Home() {
   const [phase, setPhase] = useState<'splash' | 'dashboard'>('splash');
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('SYSTEM - INITIALIZING');
-  const [vouchers, setVouchers] = useState([]);
+  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
+
+  const fetchVouchers = useCallback(async () => {
+    setDataLoading(true);
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch('/api/gas', { signal: controller.signal });
+      clearTimeout(timeout);
+      const data = await res.json();
+      setVouchers(data.vouchers || []);
+    } catch (err) {
+      console.error("Data Fetch Error", err);
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
-    
-    const noCacheUrl = `${process.env.NEXT_PUBLIC_GAS_URL}?t=${Date.now()}`;
-    fetch(noCacheUrl)
-      .then(res => res.json())
-      .then(data => setVouchers(data.vouchers || []))
-      .catch(err => console.error("Data Fetch Error", err));
+
+    // ✅ Data fetch ကို splash နဲ့ parallel ပြေးသည် — dashboard ဝင်ချိန်မှာ data အသင့်ရှိမည်
+    fetchVouchers();
 
     if (sessionStorage.getItem('splashShown')) {
       setPhase('dashboard');
       return;
     }
-    
+
     const timer = setInterval(() => {
       setProgress(old => {
         if (old >= 100) {
@@ -37,17 +51,16 @@ export default function Home() {
         if (old < 30) setStatus('SYSTEM - ONLINE CHECKING...');
         else if (old < 60) setStatus('INTERNET - STABILIZING...');
         else if (old < 90) setStatus('DATA - PROCESSING ARCHIVES...');
-        return old + 1; 
+        return old + 1;
       });
     }, 60);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [fetchVouchers]);
 
   if (phase === 'splash') {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6 font-black text-slate-950 uppercase overflow-hidden">
-        {/* 🔴 မျက်စိအေးသော Soft Glow များ 🔴 */}
         <div className="absolute inset-0 opacity-40 pointer-events-none">
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-200 blur-[150px] animate-pulse"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-pink-200 blur-[150px] animate-pulse delay-700"></div>
@@ -61,7 +74,6 @@ export default function Home() {
                 <Landmark size={20} className="font-black"/>
               </div>
             </div>
-            
             <div className="text-center space-y-2 font-black">
               <h1 className="text-2xl tracking-[0.1em] font-black text-slate-950">SHINING STARS - MA THWE</h1>
               <h2 className="text-xs tracking-[0.4em] text-slate-600 font-black">PRIVATE HIGH SCHOOL</h2>
@@ -73,11 +85,10 @@ export default function Home() {
             <div className="flex items-center justify-between text-[10px] tracking-widest text-slate-500 font-black">
               <span className="flex items-center gap-2"><Cpu size={14}/> SYSTEM: ONLINE</span>
               <span className="flex items-center gap-2">
-                <Wifi size={14} className={isOnline ? 'text-emerald-600' : 'text-rose-600'}/> 
+                <Wifi size={14} className={isOnline ? 'text-emerald-600' : 'text-rose-600'}/>
                 INTERNET: {isOnline ? 'STABLE' : 'CHECKING'}
               </span>
             </div>
-
             <div className="space-y-3 font-black">
               <div className="flex justify-between items-end font-black">
                 <span className="text-[12px] text-slate-600 font-black">{status}</span>
@@ -87,7 +98,6 @@ export default function Home() {
                 <div className="h-full bg-slate-950 transition-all duration-300 ease-out" style={{ width: `${progress}%` }}></div>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 font-black">
               <div className="flex items-center gap-2 text-[9px] text-slate-500 font-black">
                 <CheckCircle2 size={12} className={progress > 30 ? 'text-slate-950' : 'text-slate-300'}/> INITIALIZING
@@ -97,12 +107,12 @@ export default function Home() {
               </div>
             </div>
           </div>
-          
+
           <div className="h-16 flex items-center justify-center font-black">
             {progress === 100 ? (
-              <button 
-                onClick={() => setPhase('dashboard')} 
-                className="w-full bg-slate-950 text-white py-4 rounded-2xl text-sm hover:bg-slate-800 transition-all shadow-lg font-black flex justify-center items-center gap-2 animate-in fade-in zoom-in duration-500"
+              <button
+                onClick={() => setPhase('dashboard')}
+                className="w-full bg-slate-950 text-white py-4 rounded-2xl text-sm hover:bg-slate-800 transition-all shadow-lg font-black flex justify-center items-center gap-2"
               >
                 ENTER SYSTEM <ArrowRight size={18} />
               </button>
@@ -118,7 +128,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-100 font-black uppercase text-slate-950">
       <div className="max-w-[1400px] mx-auto p-6 lg:p-10 space-y-12">
-        
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b-4 border-slate-200 pb-10 font-black print:hidden">
           <div className="flex items-center gap-6 font-black">
             <div className="relative w-24 h-24 bg-white rounded-[2rem] shadow-sm p-2 border border-slate-200 shrink-0">
@@ -132,12 +142,20 @@ export default function Home() {
               </div>
             </div>
           </div>
-          
+
           <div className="flex gap-4 items-center font-black">
-            <div className="hidden lg:flex bg-white px-6 py-4 rounded-3xl border border-slate-200 shadow-sm items-center gap-3 font-black">
-               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
-               <span className="text-[10px] font-black text-slate-950">LIVE SYNC</span>
-            </div>
+            {/* ✅ Data loading indicator */}
+            {dataLoading ? (
+              <div className="hidden lg:flex bg-white px-6 py-4 rounded-3xl border border-slate-200 shadow-sm items-center gap-3 font-black">
+                <RefreshCcw size={14} className="animate-spin text-slate-500" />
+                <span className="text-[10px] font-black text-slate-500">SYNCING...</span>
+              </div>
+            ) : (
+              <div className="hidden lg:flex bg-white px-6 py-4 rounded-3xl border border-slate-200 shadow-sm items-center gap-3 font-black">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
+                <span className="text-[10px] font-black text-slate-950">LIVE SYNC</span>
+              </div>
+            )}
             <Link href="/entry" className="bg-slate-950 text-white px-8 py-4 rounded-3xl shadow-lg hover:bg-slate-800 transition-all flex items-center gap-2 font-black text-sm">
               <Plus size={18} strokeWidth={3} /> ADD NEW VOUCHER
             </Link>
@@ -145,7 +163,15 @@ export default function Home() {
         </div>
 
         <section className="space-y-6 font-black">
-           <FinancialDashboard vouchers={vouchers} />
+          {dataLoading && vouchers.length === 0 ? (
+            // ✅ Dashboard loading skeleton
+            <div className="flex flex-col items-center justify-center py-40 gap-6">
+              <RefreshCcw className="animate-spin text-slate-400" size={40} />
+              <p className="text-[10px] tracking-[0.3em] text-slate-400 font-black">LOADING FINANCIAL DATA...</p>
+            </div>
+          ) : (
+            <FinancialDashboard vouchers={vouchers} onRefresh={fetchVouchers} />
+          )}
         </section>
 
       </div>

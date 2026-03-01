@@ -31,7 +31,6 @@ export async function GET() {
   if (cache && !isStale) {
     return NextResponse.json(cache.data, { headers: { 'X-Cache': 'HIT' } });
   }
-
   if (cache && isStale && !isFetching) {
     isFetching = true;
     fetchFromGAS()
@@ -40,7 +39,6 @@ export async function GET() {
       .finally(() => { isFetching = false; });
     return NextResponse.json(cache.data, { headers: { 'X-Cache': 'STALE' } });
   }
-
   try {
     isFetching = true;
     const data = await fetchFromGAS();
@@ -56,29 +54,32 @@ export async function GET() {
   }
 }
 
-// ✅ Telegram ပို့သည် — item တစ်ခုချင်းစီ + batch summary
-async function sendTelegram(items: any[]) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+// ✅ Telegram ပို့သည် — item list မှ summary တစ်ကြိမ်တည်း
+async function sendTelegramSummary(items: any[]) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log('Telegram credentials missing');
+    return;
+  }
 
-  const totalIn  = items.filter(i => i.type === 'Cash In').reduce((s, i) => s + (i.cost_total || 0), 0);
-  const totalOut = items.filter(i => i.type !== 'Cash In').reduce((s, i) => s + (i.cost_total || 0), 0);
+  const totalIn  = items.filter(i => i.type === 'Cash In').reduce((s, i) => s + Number(i.cost_total || 0), 0);
+  const totalOut = items.filter(i => i.type !== 'Cash In').reduce((s, i) => s + Number(i.cost_total || 0), 0);
   const balance  = totalIn - totalOut;
   const date     = items[0]?.date || new Date().toISOString().split('T')[0];
 
-  // ── Item lines ──
   const itemLines = items.map((i, idx) => {
-    const arrow  = i.type === 'Cash In' ? '🟢' : '🔴';
-    const cat    = [i.category, i.sub1, i.sub2].filter(Boolean).join(' › ');
-    const amount = (i.cost_total || 0).toLocaleString();
+    const arrow = i.type === 'Cash In' ? '🟢' : '🔴';
+    const cat   = [i.category, i.sub1, i.sub2].filter(Boolean).join(' › ');
     return `${arrow} *${idx + 1}. ${i.item_description || '-'}*\n` +
-           `   📂 ${cat}\n` +
-           `   🏪 ${i.vendor || 'GENERAL'}  |  👤 ${i.entered_by} (${i.account})\n` +
-           `   💵 ${amount} MMK  [${i.type}]` +
+           `   📂 ${cat || 'GENERAL'}\n` +
+           `   🏪 ${i.vendor || 'GENERAL'}  |  👤 ${i.entered_by || 'GM'} \\(${i.account || 'GM ACCOUNT'}\\)\n` +
+           `   💵 ${Number(i.cost_total || 0).toLocaleString()} MMK  \\[${i.type}\\]` +
            (i.note ? `\n   📝 ${i.note}` : '');
   }).join('\n\n');
 
-  // ── Daily summary ──
-  const summaryLines =
+  const msg =
+    `🏫 *SHINING STARS — FINANCE*\n` +
+    `🧾 *NEW TRANSACTION SUBMITTED*\n\n` +
+    itemLines + '\n\n' +
     `📊 *TODAY'S SUMMARY — ${date}*\n` +
     `━━━━━━━━━━━━━━━━━━\n` +
     `🟢 Cash In  : *${totalIn.toLocaleString()} MMK*\n` +
@@ -86,28 +87,36 @@ async function sendTelegram(items: any[]) {
     `━━━━━━━━━━━━━━━━━━\n` +
     `${balance >= 0 ? '✅' : '⚠️'} Balance   : *${balance >= 0 ? '+' : ''}${balance.toLocaleString()} MMK*`;
 
-  const msg =
-    `🏫 *SHINING STARS — FINANCE*\n` +
-    `🧾 *NEW TRANSACTION SUBMITTED*\n\n` +
-    itemLines + '\n\n' +
-    summaryLines;
+  const telegramRes = await fetch(
+    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: msg,
+        parse_mode: 'MarkdownV2',
+      }),
+    }
+  );
 
-  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID,
-      text: msg,
-      parse_mode: 'Markdown',
-    }),
-  });
+  const result = await telegramRes.json();
+  if (!result.ok) {
+    console.error('Telegram error:', JSON.stringify(result));
+  }
 }
 
-// POST — send / delete
+// POST — send / delete / telegram_summary
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action } = body;
+
+    // ✅ Telegram summary only — GAS ကို မခေါ်၊ Telegram ကိုသာ ပို့
+    if (action === 'telegram_summary') {
+      await sendTelegramSummary(body.items || []);
+      return NextResponse.json({ result: 'telegram_sent' });
+    }
 
     if (action === 'delete') {
       const res = await fetch(GAS_URL, {
@@ -118,17 +127,15 @@ export async function POST(req: NextRequest) {
       const data = await res.json();
       cache = null;
 
-      // ✅ Delete notification
-      const v = body.voucherno;
-      sendTelegram([{
+      // Delete notification
+      sendTelegramSummary([{
         type: 'Cash Out',
-        item_description: `🗑️ DELETED: ${v}`,
-        category: 'DELETE',
-        sub1: '', sub2: '',
+        item_description: `🗑️ DELETED: ${body.voucherno}`,
+        category: 'DELETE', sub1: '', sub2: '',
         vendor: '-', entered_by: '-', account: '-',
         cost_total: 0,
         date: new Date().toISOString().split('T')[0],
-        note: `Voucher ${v} ကို ဖျက်လိုက်သည်`,
+        note: `Voucher ${body.voucherno} ကို ဖျက်လိုက်သည်`,
       }]).catch(() => {});
 
       return NextResponse.json(data);
@@ -142,18 +149,12 @@ export async function POST(req: NextRequest) {
       });
       const data = await res.json();
       cache = null;
-
-      // ✅ Telegram — batch items ရှိရင် batch ပို့၊ မဟုတ်ရင် single item ပို့
-      const items = Array.isArray(body.items) && body.items.length > 0
-        ? body.items
-        : [body.data];
-      sendTelegram(items).catch(() => {});
-
       return NextResponse.json(data);
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  } catch {
+  } catch (e) {
+    console.error('POST error:', e);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

@@ -9,19 +9,24 @@ export async function sendToSheet(data: any) {
   return res.json();
 }
 
-// ✅ Batch submit — item အကုန်ကို တစ်ခါတည်း GAS ပို့ပြီး Telegram summary တစ်ကြိမ်သာ ပေးပို့
+// ✅ Batch submit — GAS ကို item တစ်ခုချင်း loop ပို့၊ Telegram ကိုတော့ အကုန်ပြီးမှ တစ်ကြိမ်တည်း summary ပို့
 export async function sendBatchToSheet(items: any[]) {
-  const results = [];
+  // Step 1: GAS ကို item တစ်ခုချင်းစီ sequential ပို့
   for (const item of items) {
     const res = await fetch('/api/gas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // ✅ items array ပါပို့သောကြောင့် server မှာ summary တစ်ကြိမ်တည်း ပို့မည်
-      body: JSON.stringify({ action: 'send', data: item, items }),
+      body: JSON.stringify({ action: 'send', data: item }),
     });
-    results.push(await res.json());
+    await res.json();
   }
-  return results;
+
+  // Step 2: GAS အကုန်ပြီးမှ Telegram summary တစ်ကြိမ်တည်း ပေးပို့
+  await fetch('/api/gas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'telegram_summary', items }),
+  });
 }
 
 export async function deleteFromSheet(voucherno: string) {
@@ -30,10 +35,5 @@ export async function deleteFromSheet(voucherno: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'delete', voucherno }),
   });
-  return res.json();
-}
-
-export async function fetchFromSheet() {
-  const res = await fetch('/api/gas');
   return res.json();
 }

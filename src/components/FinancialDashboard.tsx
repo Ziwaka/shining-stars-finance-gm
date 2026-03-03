@@ -280,7 +280,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
                   paddingAngle={4}
                   dataKey="value"
                   stroke="none"
-                  label={({ name, percent }: any) => percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
+                  label={({ name, percent }: any) => `${name.length > 8 ? name.substring(0,8)+'..' : name} ${(percent*100).toFixed(0)}%`}
                   labelLine={true}
                 >
                   {analytics.categories.map((_:any, i:any) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}

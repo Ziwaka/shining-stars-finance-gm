@@ -6,7 +6,15 @@ import { Plus, Trash2, Save, RefreshCcw, Camera, ArrowUpRight, ArrowDownLeft, Ch
 export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [type, setType] = useState<'Cash Out' | 'Cash In'>('Cash Out');
   const [vendor, setVendor] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // ✅ Myanmar Time (UTC+6:30)
+  const getMyanmarDate = () => {
+    const now = new Date();
+    const mmOffset = 6.5 * 60; // minutes
+    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+    const mmTime = new Date(utc + mmOffset * 60000);
+    return mmTime.toISOString().split('T')[0];
+  };
+  const [date, setDate] = useState(getMyanmarDate());
   const [voucherno, setVoucherno] = useState('');
   const [image, setImage] = useState<string>('');
   const [itemList, setItemList] = useState<any[]>([]);
@@ -93,12 +101,14 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     
     const total = Math.round(countNum * costNum);
 
-    // ✅ Bug Fix: ID ကို addItem မှာ ကြိုတင် generate ပြီး item ထဲ ထည့်သည်
-    const generatedId = generateVrID(category, itemList);
+    // ✅ Batch Logic: ဆိုင်တူ + ရက်တူ + type တူ = ID တူ
+    // batch ထဲမှာ vendor+date+type တူတာ ရှိပြီးသားဆိုရင် ID ကိုယူ၊ မဟုတ်ရင် အသစ် generate
+    const existing = itemList.find(i => i.vendor === vendor && i.date === date && i.type === type);
+    const batchId = existing ? existing.voucherno : generateVrID(category, itemList);
 
     const newItem = {
       date, entered_by: enteredBy, account, vendor, type,
-      voucherno: generatedId, // ✅ ပြည့်စုံသော ID ဖြင့် သိမ်းသည်
+      voucherno: batchId,
       category, sub1, sub2, sub3, sub4, sub5,
       item_description: currentItem.item_description, note: currentItem.note,
       count: countNum, cost_piece: costNum, cost_total: total, image_data: image, id: Date.now()

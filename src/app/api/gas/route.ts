@@ -147,7 +147,9 @@ export async function POST(req: NextRequest) {
 
     // ✅ Telegram summary — cache ထဲက allVouchers နဲ့ တွဲတွက်မည်
     if (action === 'telegram_summary') {
-      // ✅ lastKnownVouchers သုံးသည် — cache invalidate ဖြစ်ပြီးနောက်လည်း historical data ရနိုင်မည်
+      // ✅ lastKnownVouchers = GAS ထဲက ဟောင်းသောဒေတာ (newItems မပါ)
+      // sendTelegramSummary ထဲမှာ combined = lastKnownVouchers + newItems တွဲတွက်မည်
+      // double count မဖြစ်အောင် lastKnownVouchers ထဲ newItems မထည့်ပါ
       await sendTelegramSummary(body.items || [], lastKnownVouchers);
       return NextResponse.json({ result: 'telegram_sent' });
     }
@@ -185,11 +187,8 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify(body.data),
       });
       const data = await res.json();
-      // ✅ cache null + forceRefresh — နောက် GET request မှာ GAS ကနေ fresh data ယူမည်
       cache = null;
       forceRefresh = true;
-      // ✅ lastKnownVouchers မှာ ခုသွင်းတဲ့ item ထည့်ထားသည် — Telegram balance တွက်ရန်
-      lastKnownVouchers = [...lastKnownVouchers, body.data];
       return NextResponse.json(data);
     }
 

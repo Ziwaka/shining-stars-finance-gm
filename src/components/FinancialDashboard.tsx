@@ -20,7 +20,12 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
   const normalizedData = useMemo(() => {
     return (vouchers || []).map(v => {
       const rawDate = v.date || v.Date || '';
-      const cleanDate = rawDate.toString().split('T')[0]; 
+      // ✅ Date normalize — UTC shift မဖြစ်အောင် string အနေနဲ့ ဆက်သုံးမည်
+      // GAS က Date object လာရင် toISOString ဖြင့် split၊ string ဆိုရင် တိုက်ရိုက် substring
+      const rawStr = rawDate instanceof Date
+        ? rawDate.toISOString().split('T')[0]
+        : rawDate.toString().replace(/T.*$/, '').substring(0, 10);
+      const cleanDate = rawStr;
       const rawAmount = v['cost_(total)'] || v.cost_total || v.Cost_Total || 0;
       const itemName = v.item_description || v['item_description'] || v.item || v.Item || '';
 

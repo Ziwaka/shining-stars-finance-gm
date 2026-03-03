@@ -209,7 +209,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
         </div>
         {/* Row 3: Actions */}
         <div className="flex gap-3 items-center justify-end">
-          <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', sub1:'', sub2:'', sub3:'', sub4:'', sub5:'', vendor: '', item: '' })} className="p-2.5 px-5 bg-slate-200 text-slate-950 rounded-xl text-xs hover:bg-slate-300 transition-all font-black">CLEAR ALL</button>
+          <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', sub1:'', sub2:'', sub3:'', sub4:'', sub5:'', vendor: '' })} className="p-2.5 px-5 bg-slate-200 text-slate-950 rounded-xl text-xs hover:bg-slate-300 transition-all font-black">CLEAR ALL</button>
           <Link href="/report" className="p-2.5 px-6 bg-slate-950 text-white rounded-xl text-xs hover:bg-slate-800 transition-all font-black flex items-center gap-2 shadow-sm">
             <Printer size={16}/> PRINT REPORT
           </Link>

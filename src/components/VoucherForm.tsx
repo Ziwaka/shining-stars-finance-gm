@@ -314,17 +314,55 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           {itemList.map(i => (
             <div key={i.id} className={`bg-white p-4 rounded-2xl shadow-sm border border-slate-200 border-l-[6px] ${i.type === 'Cash In' ? 'border-l-emerald-400' : 'border-l-rose-400'} font-black`}>
               <div className="flex justify-between items-start font-black">
-                <div className="space-y-1 font-black">
+                <div className="space-y-1 font-black flex-grow mr-2">
                   <p className="text-[10px] text-slate-500 font-black">{i.voucherno}</p>
                   <p className="text-xs leading-tight font-black text-slate-950">{i.item_description}</p>
                   <p className="text-[8px] text-slate-600 uppercase font-black">[{i.entered_by} • {i.account}]</p>
                 </div>
-                <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="text-rose-500 p-1 font-black"><Trash2 size={14} className="font-black"/></button>
+                <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="text-rose-500 p-1 font-black shrink-0"><Trash2 size={14}/></button>
               </div>
               {i.note && <p className="text-[9px] text-slate-500 mt-2 font-black">NOTE: {i.note}</p>}
               <div className="flex justify-between items-end mt-4 font-black">
                 <p className="text-[9px] text-slate-500 font-black">{i.count} X {i.cost_piece.toLocaleString()} MMK</p>
                 <p className="text-sm font-black text-slate-950">{(i.cost_total).toLocaleString()}</p>
+              </div>
+              {/* ✅ Photo per item — add/view/remove */}
+              <div className="mt-3 font-black">
+                {i.image_data ? (
+                  <div className="relative w-full h-24 rounded-xl overflow-hidden border border-slate-200">
+                    <img src={i.image_data} className="w-full h-full object-cover"/>
+                    <button
+                      onClick={() => setItemList(itemList.map(x => x.id === i.id ? {...x, image_data: ''} : x))}
+                      className="absolute top-1 right-1 bg-rose-100 text-rose-600 p-1 rounded-full shadow-sm">
+                      <Trash2 size={12}/>
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer flex items-center gap-2 text-[9px] text-slate-400 hover:text-slate-600 transition-colors font-black">
+                    <Camera size={14}/>
+                    <span>ADD PHOTO</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        const img = new window.Image();
+                        img.onload = () => {
+                          const canvas = document.createElement('canvas');
+                          let w = img.width, h = img.height;
+                          if (w > h) { if (w > 800) { h *= 800/w; w = 800; } } else { if (h > 800) { w *= 800/h; h = 800; } }
+                          canvas.width = w; canvas.height = h;
+                          canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
+                          const compressed = canvas.toDataURL('image/jpeg', 0.7);
+                          setItemList(itemList.map(x => x.id === i.id ? {...x, image_data: compressed} : x));
+                        };
+                        img.src = ev.target?.result as string;
+                      };
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}/>
+                  </label>
+                )}
               </div>
             </div>
           ))}

@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
         category: '-', sub1: '', sub2: '',
         vendor: '-', entered_by: '-', account: '-',
         cost_total: 0,
-        date: new Date().toISOString().split('T')[0],
+        date: (() => { const now = new Date(); const mm = new Date(now.getTime() + (6.5*60*60*1000)); return mm.toISOString().split('T')[0]; })(),
         note: `Voucher ${body.voucherno} ဖျက်လိုက်သည်`,
       }], []).catch(() => {});
 

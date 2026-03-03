@@ -8,7 +8,7 @@ import { deleteFromSheet } from '@/lib/api';
 const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316', '#84cc16'];
 
 export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouchers: any[], onRefresh?: () => void }) {
-  const [filter, setFilter] = useState({ startDate: '', endDate: '', category: '', item: '', vendor: '' });
+  const [filter, setFilter] = useState({ startDate: '', endDate: '', category: '', sub1: '', sub2: '', sub3: '', sub4: '', sub5: '', vendor: '' });
   const [selectedImg, setSelectedImg] = useState<string | null>(null);
 
   // ✅ Delete confirmation modal state
@@ -50,13 +50,30 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
     });
   }, [vouchers]);
 
+  // ✅ Dropdown options from data
+  const filterOptions = useMemo(() => {
+    const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean))).sort();
+    const cats = uniq(normalizedData.map(v => v.category));
+    const sub1s = uniq(normalizedData.filter(v => !filter.category || v.category === filter.category).map(v => v.sub1));
+    const sub2s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1)).map(v => v.sub2));
+    const sub3s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1) && (!filter.sub2 || v.sub2 === filter.sub2)).map(v => v.sub3));
+    const sub4s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1) && (!filter.sub2 || v.sub2 === filter.sub2) && (!filter.sub3 || v.sub3 === filter.sub3)).map(v => v.sub4));
+    const sub5s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1) && (!filter.sub2 || v.sub2 === filter.sub2) && (!filter.sub3 || v.sub3 === filter.sub3) && (!filter.sub4 || v.sub4 === filter.sub4)).map(v => v.sub5));
+    const vendors = uniq(normalizedData.map(v => v.vendor));
+    return { cats, sub1s, sub2s, sub3s, sub4s, sub5s, vendors };
+  }, [normalizedData, filter.category, filter.sub1, filter.sub2, filter.sub3, filter.sub4]);
+
   const filtered = useMemo(() => {
     return normalizedData.filter(v => {
       const inDateRange = (!filter.startDate || v.date >= filter.startDate) && (!filter.endDate || v.date <= filter.endDate);
       return inDateRange &&
-        v.category.toLowerCase().includes(filter.category.toLowerCase()) &&
-        v.item.toLowerCase().includes(filter.item.toLowerCase()) &&
-        v.vendor.toLowerCase().includes(filter.vendor.toLowerCase());
+        (!filter.category || v.category === filter.category) &&
+        (!filter.sub1 || v.sub1 === filter.sub1) &&
+        (!filter.sub2 || v.sub2 === filter.sub2) &&
+        (!filter.sub3 || v.sub3 === filter.sub3) &&
+        (!filter.sub4 || v.sub4 === filter.sub4) &&
+        (!filter.sub5 || v.sub5 === filter.sub5) &&
+        (!filter.vendor || v.vendor === filter.vendor);
     });
   }, [normalizedData, filter]);
 
@@ -138,17 +155,65 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
       )}
 
       {/* FILTER BAR */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-3 items-center font-black print:hidden">
-        <Filter className="text-slate-400" size={18}/>
-        <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-black text-slate-950" value={filter.startDate} onChange={e => setFilter({...filter, startDate: e.target.value})} />
-        <span className="text-[10px] text-slate-400 font-black">TO</span>
-        <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-black text-slate-950" value={filter.endDate} onChange={e => setFilter({...filter, endDate: e.target.value})} />
-        <input type="text" placeholder="CATEGORY..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none flex-grow font-black text-slate-950 uppercase" value={filter.category} onChange={e => setFilter({...filter, category: e.target.value})} />
-        <input type="text" placeholder="VENDOR..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none flex-grow font-black text-slate-950 uppercase" value={filter.vendor} onChange={e => setFilter({...filter, vendor: e.target.value})} />
-        <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', item: '', vendor: '' })} className="p-2.5 px-4 bg-slate-200 text-slate-950 rounded-lg text-xs hover:bg-slate-300 transition-all font-black">CLEAR</button>
-        <Link href="/report" className="p-2.5 px-6 bg-slate-950 text-white rounded-lg text-xs hover:bg-slate-800 transition-all font-black flex items-center gap-2 ml-auto shadow-sm">
-          <Printer size={16}/> PRINT REPORT
-        </Link>
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 font-black print:hidden space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Filter className="text-slate-400" size={16}/>
+          <span className="text-[10px] tracking-widest text-slate-500 font-black">FILTER</span>
+        </div>
+        {/* Row 1: Date + Vendor */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[130px]" value={filter.startDate} onChange={e => setFilter({...filter, startDate: e.target.value})} />
+          <span className="text-[10px] text-slate-400 font-black">TO</span>
+          <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[130px]" value={filter.endDate} onChange={e => setFilter({...filter, endDate: e.target.value})} />
+          <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[130px] uppercase" value={filter.vendor} onChange={e => setFilter({...filter, vendor: e.target.value})}>
+            <option value="">ALL VENDORS</option>
+            {filterOptions.vendors.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </div>
+        {/* Row 2: Category + Subs (cascade) */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.category} onChange={e => setFilter({...filter, category: e.target.value, sub1:'', sub2:'', sub3:'', sub4:'', sub5:''})}>
+            <option value="">ALL CATEGORIES</option>
+            {filterOptions.cats.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {filterOptions.sub1s.filter(s => s && s !== 'GENERAL').length > 0 && (
+            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub1} onChange={e => setFilter({...filter, sub1: e.target.value, sub2:'', sub3:'', sub4:'', sub5:''})}>
+              <option value="">ALL SUB 1</option>
+              {filterOptions.sub1s.filter(s => s && s !== 'GENERAL').map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {filter.sub1 && filterOptions.sub2s.filter(Boolean).length > 0 && (
+            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub2} onChange={e => setFilter({...filter, sub2: e.target.value, sub3:'', sub4:'', sub5:''})}>
+              <option value="">ALL SUB 2</option>
+              {filterOptions.sub2s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {filter.sub2 && filterOptions.sub3s.filter(Boolean).length > 0 && (
+            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub3} onChange={e => setFilter({...filter, sub3: e.target.value, sub4:'', sub5:''})}>
+              <option value="">ALL SUB 3</option>
+              {filterOptions.sub3s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {filter.sub3 && filterOptions.sub4s.filter(Boolean).length > 0 && (
+            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub4} onChange={e => setFilter({...filter, sub4: e.target.value, sub5:''})}>
+              <option value="">ALL SUB 4</option>
+              {filterOptions.sub4s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {filter.sub4 && filterOptions.sub5s.filter(Boolean).length > 0 && (
+            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub5} onChange={e => setFilter({...filter, sub5: e.target.value})}>
+              <option value="">ALL SUB 5</option>
+              {filterOptions.sub5s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+        </div>
+        {/* Row 3: Actions */}
+        <div className="flex gap-3 items-center justify-end">
+          <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', sub1:'', sub2:'', sub3:'', sub4:'', sub5:'', vendor: '', item: '' })} className="p-2.5 px-5 bg-slate-200 text-slate-950 rounded-xl text-xs hover:bg-slate-300 transition-all font-black">CLEAR ALL</button>
+          <Link href="/report" className="p-2.5 px-6 bg-slate-950 text-white rounded-xl text-xs hover:bg-slate-800 transition-all font-black flex items-center gap-2 shadow-sm">
+            <Printer size={16}/> PRINT REPORT
+          </Link>
+        </div>
       </div>
 
       {/* 🔴 SOFT PASTEL TILES 🔴 */}

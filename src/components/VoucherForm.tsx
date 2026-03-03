@@ -213,20 +213,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-black">
           <div className="space-y-4 font-black">
-             <div className="relative h-44 bg-white rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden font-black">
-               {image ? (
-                 <>
-                   <img src={image} className="w-full h-full object-cover font-black"/>
-                   <button onClick={() => setImage('')} className="absolute top-2 right-2 bg-rose-100 text-rose-600 border border-rose-200 p-2 rounded-full font-black shadow-sm"><Trash2 size={14}/></button>
-                 </>
-               ) : (
-                 <label className="cursor-pointer flex flex-col items-center font-black">
-                   <Camera size={32} className="text-slate-400 mb-2 font-black"/>
-                   <span className="text-[10px] text-slate-500 font-black">VR PHOTO</span>
-                   <input type="file" accept="image/*" className="hidden font-black" onChange={handleImageUpload} />
-                 </label>
-               )}
-             </div>
              
              <div className="space-y-1 font-black">
                <label className="text-[10px] text-slate-500 uppercase font-black">CATEGORY</label>

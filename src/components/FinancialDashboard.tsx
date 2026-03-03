@@ -259,8 +259,8 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
               <BarChart data={analytics.trends} barCategoryGap="30%">
                 <CartesianGrid vertical={false} stroke="#f1f5f9"/>
                 <XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 900, fill: '#64748b'}} tickFormatter={(v: string) => v.length > 7 ? v.substring(5) : v}/>
-                <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}/>
-                <Tooltip formatter={(v: number) => v.toLocaleString() + ' MMK'}/>
+                <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: any) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}/>
+                <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'}/>
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 900, color: '#0f172a' }}/>
                 <Bar dataKey="income" fill="#10b981" name="Cash In" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expense" fill="#f43f5e" name="Cash Out" radius={[4, 4, 0, 0]} />
@@ -280,12 +280,12 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
                   paddingAngle={4}
                   dataKey="value"
                   stroke="none"
-                  label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }: any) => percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
                   labelLine={true}
                 >
                   {analytics.categories.map((_:any, i:any) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
                 </Pie>
-                <Tooltip formatter={(v: number) => v.toLocaleString() + ' MMK'}/>
+                <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'}/>
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -310,8 +310,8 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
                   <BarChart data={catChart.data} barCategoryGap="25%">
                     <CartesianGrid vertical={false} stroke="#f1f5f9"/>
                     <XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 900, fill: '#64748b'}} tickFormatter={(v: string) => v.length > 7 ? v.substring(5) : v}/>
-                    <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}/>
-                    <Tooltip formatter={(v: number) => v.toLocaleString() + ' MMK'}/>
+                    <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: any) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}/>
+                    <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'}/>
                     <Legend iconType="rect" wrapperStyle={{ fontSize: '9px', fontWeight: 900, color: '#0f172a' }}/>
                     {/* Cash In subs — stacked green tones */}
                     {catChart.inKeys.map((sub, sIdx) => (

@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2, ShieldAlert } from 'lucide-react';
 import { deleteFromSheet } from '@/lib/api';
 
-const COLORS = ['#cbd5e1', '#e2e8f0', '#f1f5f9', '#94a3b8', '#64748b', '#475569', '#cbd5e1', '#f1f5f9'];
+const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316', '#84cc16'];
 
 export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouchers: any[], onRefresh?: () => void }) {
   const [filter, setFilter] = useState({ startDate: '', endDate: '', category: '', item: '', vendor: '' });
@@ -211,6 +211,49 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+
+      {/* ✅ Monthly Summary Table */}
+      <div className="space-y-4 font-black">
+        <div className="flex items-center gap-3 px-2">
+          <TrendingUp className="text-slate-400" size={24} />
+          <h2 className="text-xl tracking-tight font-black text-slate-950 uppercase">Monthly Summary</h2>
+        </div>
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+          <table className="w-full text-left font-black uppercase">
+            <thead className="bg-slate-100 text-[10px] text-slate-500 border-b border-slate-200">
+              <tr>
+                <th className="py-4 px-6 font-black text-slate-950">Month</th>
+                <th className="py-4 px-6 text-right font-black text-emerald-700">Cash In</th>
+                <th className="py-4 px-6 text-right font-black text-rose-700">Cash Out</th>
+                <th className="py-4 px-6 text-right font-black text-slate-950">Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(() => {
+                const monthMap: Record<string, {in: number, out: number}> = {};
+                normalizedData.forEach(v => {
+                  const m = v.date ? v.date.substring(0, 7) : 'Unknown';
+                  if (!monthMap[m]) monthMap[m] = {in: 0, out: 0};
+                  if (v.type === 'Cash In') monthMap[m].in += v.cost_total;
+                  else monthMap[m].out += v.cost_total;
+                });
+                return Object.keys(monthMap).sort().reverse().map(m => {
+                  const bal = monthMap[m].in - monthMap[m].out;
+                  return (
+                    <tr key={m} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-4 px-6 text-sm font-black text-slate-950">{m}</td>
+                      <td className="py-4 px-6 text-right text-sm font-black text-emerald-600">+{monthMap[m].in.toLocaleString()}</td>
+                      <td className="py-4 px-6 text-right text-sm font-black text-rose-600">-{monthMap[m].out.toLocaleString()}</td>
+                      <td className={`py-4 px-6 text-right text-sm font-black ${bal >= 0 ? 'text-slate-950' : 'text-rose-600'}`}>{bal >= 0 ? '+' : ''}{bal.toLocaleString()}</td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
         </div>
       </div>
 

@@ -222,38 +222,75 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
           <h2 className="text-xl tracking-tight font-black text-slate-950 uppercase">Monthly Summary</h2>
         </div>
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-          <table className="w-full text-left font-black uppercase">
-            <thead className="bg-slate-100 text-[10px] text-slate-500 border-b border-slate-200">
-              <tr>
-                <th className="py-4 px-6 font-black text-slate-950">Month</th>
-                <th className="py-4 px-6 text-right font-black text-emerald-700">Cash In</th>
-                <th className="py-4 px-6 text-right font-black text-rose-700">Cash Out</th>
-                <th className="py-4 px-6 text-right font-black text-slate-950">Balance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(() => {
-                const monthMap: Record<string, {in: number, out: number}> = {};
-                normalizedData.forEach(v => {
-                  const m = v.date ? v.date.substring(0, 7) : 'Unknown';
-                  if (!monthMap[m]) monthMap[m] = {in: 0, out: 0};
-                  if (v.type === 'Cash In') monthMap[m].in += v.cost_total;
-                  else monthMap[m].out += v.cost_total;
-                });
-                return Object.keys(monthMap).sort().reverse().map(m => {
-                  const bal = monthMap[m].in - monthMap[m].out;
-                  return (
-                    <tr key={m} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-4 px-6 text-sm font-black text-slate-950">{m}</td>
-                      <td className="py-4 px-6 text-right text-sm font-black text-emerald-600">+{monthMap[m].in.toLocaleString()}</td>
-                      <td className="py-4 px-6 text-right text-sm font-black text-rose-600">-{monthMap[m].out.toLocaleString()}</td>
-                      <td className={`py-4 px-6 text-right text-sm font-black ${bal >= 0 ? 'text-slate-950' : 'text-rose-600'}`}>{bal >= 0 ? '+' : ''}{bal.toLocaleString()}</td>
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
+          {/* ✅ Mobile: card layout, Desktop: table layout */}
+          <div className="hidden md:block">
+            <table className="w-full text-left font-black uppercase">
+              <thead className="bg-slate-100 text-[10px] text-slate-500 border-b border-slate-200">
+                <tr>
+                  <th className="py-4 px-6 font-black text-slate-950">Month</th>
+                  <th className="py-4 px-6 text-right font-black text-emerald-700">Cash In</th>
+                  <th className="py-4 px-6 text-right font-black text-rose-700">Cash Out</th>
+                  <th className="py-4 px-6 text-right font-black text-slate-950">Balance</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(() => {
+                  const monthMap: Record<string, {in: number, out: number}> = {};
+                  normalizedData.forEach(v => {
+                    const m = v.date ? v.date.substring(0, 7) : 'Unknown';
+                    if (!monthMap[m]) monthMap[m] = {in: 0, out: 0};
+                    if (v.type === 'Cash In') monthMap[m].in += v.cost_total;
+                    else monthMap[m].out += v.cost_total;
+                  });
+                  return Object.keys(monthMap).sort().reverse().map(m => {
+                    const bal = monthMap[m].in - monthMap[m].out;
+                    return (
+                      <tr key={m} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-6 text-sm font-black text-slate-950">{m}</td>
+                        <td className="py-4 px-6 text-right text-sm font-black text-emerald-600">+{monthMap[m].in.toLocaleString()}</td>
+                        <td className="py-4 px-6 text-right text-sm font-black text-rose-600">-{monthMap[m].out.toLocaleString()}</td>
+                        <td className={`py-4 px-6 text-right text-sm font-black ${bal >= 0 ? 'text-slate-950' : 'text-rose-600'}`}>{bal >= 0 ? '+' : ''}{bal.toLocaleString()}</td>
+                      </tr>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </div>
+          {/* ✅ Mobile card layout */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {(() => {
+              const monthMap: Record<string, {in: number, out: number}> = {};
+              normalizedData.forEach(v => {
+                const m = v.date ? v.date.substring(0, 7) : 'Unknown';
+                if (!monthMap[m]) monthMap[m] = {in: 0, out: 0};
+                if (v.type === 'Cash In') monthMap[m].in += v.cost_total;
+                else monthMap[m].out += v.cost_total;
+              });
+              return Object.keys(monthMap).sort().reverse().map(m => {
+                const bal = monthMap[m].in - monthMap[m].out;
+                return (
+                  <div key={m} className="p-5 space-y-3">
+                    <div className="text-base font-black text-slate-950">{m}</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-emerald-50 rounded-2xl p-3 text-center">
+                        <div className="text-[9px] text-emerald-600 font-black mb-1">CASH IN</div>
+                        <div className="text-xs font-black text-emerald-700">+{monthMap[m].in.toLocaleString()}</div>
+                      </div>
+                      <div className="bg-rose-50 rounded-2xl p-3 text-center">
+                        <div className="text-[9px] text-rose-600 font-black mb-1">CASH OUT</div>
+                        <div className="text-xs font-black text-rose-700">-{monthMap[m].out.toLocaleString()}</div>
+                      </div>
+                      <div className={`rounded-2xl p-3 text-center ${bal >= 0 ? 'bg-slate-100' : 'bg-rose-50'}`}>
+                        <div className="text-[9px] text-slate-500 font-black mb-1">BALANCE</div>
+                        <div className={`text-xs font-black ${bal >= 0 ? 'text-slate-950' : 'text-rose-700'}`}>{bal >= 0 ? '+' : ''}{bal.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
         </div>
       </div>
 

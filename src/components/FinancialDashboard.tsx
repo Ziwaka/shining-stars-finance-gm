@@ -202,7 +202,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
                 <CartesianGrid vertical={false} stroke="#f1f5f9"/>
                 <XAxis dataKey="date" tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} tickLine={false} axisLine={false}/>
                 <YAxis tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}/>
-                <Tooltip formatter={(val: any) => [`${Number(val).toLocaleString()} MMK`]} labelStyle={{ fontWeight: 900, fontSize: 10 }}/>
+                <Tooltip formatter={(val: any) => Number(val).toLocaleString() + ' MMK'} labelStyle={{ fontWeight: 900, fontSize: 10 }}/>
                 <Legend iconType="circle" wrapperStyle={{ fontSize: 10, fontWeight: 900 }}/>
                 <Bar dataKey="income"  fill="#10b981" name="CASH IN"  radius={[4,4,0,0]}/>
                 <Bar dataKey="expense" fill="#f43f5e" name="CASH OUT" radius={[4,4,0,0]}/>
@@ -218,7 +218,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
                 <Pie data={analytics.categories} innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value" stroke="none" labelLine={true} label={renderPieLabel}>
                   {analytics.categories.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
                 </Pie>
-                <Tooltip formatter={(val: any) => [`${Number(val).toLocaleString()} MMK`]}/>
+                <Tooltip formatter={(val: any) => Number(val).toLocaleString() + ' MMK'}/>
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -242,7 +242,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
                       <CartesianGrid vertical={false} stroke="#f1f5f9"/>
                       <XAxis dataKey="date" tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} tickLine={false} axisLine={false}/>
                       <YAxis tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}/>
-                     formatter={(val: any) => [`${Number(val).toLocaleString()} MMK`]}
+                      <Tooltip formatter={(val: any) => Number(val).toLocaleString() + ' MMK'}/>
                       <Legend iconType="rect" wrapperStyle={{ fontSize: 9, fontWeight: 900 }}/>
                       {catChart.subKeys.map((sub, sIdx) => (
                         <Bar key={sub} dataKey={sub} stackId="a" fill={COLORS[sIdx % COLORS.length]} name={sub} radius={sIdx === catChart.subKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
@@ -367,4 +367,3 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
     </div>
   );
 }
-

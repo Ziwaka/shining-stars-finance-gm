@@ -147,10 +147,21 @@ export async function POST(req: NextRequest) {
 
     // ✅ Telegram summary — cache ထဲက allVouchers နဲ့ တွဲတွက်မည်
     if (action === 'telegram_summary') {
-      // ✅ lastKnownVouchers = GAS ထဲက ဟောင်းသောဒေတာ (newItems မပါ)
-      // sendTelegramSummary ထဲမှာ combined = lastKnownVouchers + newItems တွဲတွက်မည်
-      // double count မဖြစ်အောင် lastKnownVouchers ထဲ newItems မထည့်ပါ
-      await sendTelegramSummary(body.items || [], lastKnownVouchers);
+      // ✅ Vercel serverless restart ဖြစ်ရင် lastKnownVouchers ပျောက်သွားတတ်သည်
+      // ဒါကြောင့် GAS ကနေ fresh fetch လုပ်ပြီး balance တွက်မည် — အမြဲတမ်း မှန်ကန်မည်
+      let allVouchers: any[] = lastKnownVouchers;
+      try {
+        const gasRes = await fetch(`${GAS_URL}?t=${Date.now()}`, { cache: 'no-store' });
+        const gasData = await gasRes.json();
+        if (gasData.vouchers && gasData.vouchers.length > 0) {
+          allVouchers = gasData.vouchers;
+          lastKnownVouchers = allVouchers;
+          cache = { data: gasData, fetchedAt: Date.now() };
+        }
+      } catch (e) {
+        console.log('GAS fetch failed, using lastKnownVouchers');
+      }
+      await sendTelegramSummary(body.items || [], allVouchers);
       return NextResponse.json({ result: 'telegram_sent' });
     }
 

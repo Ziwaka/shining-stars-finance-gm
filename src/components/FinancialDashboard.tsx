@@ -65,14 +65,26 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
   }, [vouchers]);
 
   const categoryOptions    = useMemo(() => Array.from(new Set(normalizedData.map(v => v.category))).filter(Boolean).sort(), [normalizedData]);
-  const subCategoryOptions = useMemo(() => Array.from(new Set(normalizedData.filter(v => !filter.category || v.category === filter.category).map(v => v.sub1))).filter(Boolean).sort(), [normalizedData, filter.category]);
+  const subCategoryOptions = useMemo(() => {
+    const opts = new Set<string>();
+    normalizedData
+      .filter(v => !filter.category || v.category === filter.category)
+      .forEach(v => {
+        if (v.sub1) opts.add(v.sub1);
+        if (v.sub2) opts.add(v.sub2);
+        if (v.sub3) opts.add(v.sub3);
+        if (v.sub4) opts.add(v.sub4);
+        if (v.sub5) opts.add(v.sub5);
+      });
+    return Array.from(opts).filter(Boolean).sort();
+  }, [normalizedData, filter.category]);
   const vendorOptions      = useMemo(() => Array.from(new Set(normalizedData.map(v => v.vendor))).filter(Boolean).sort(), [normalizedData]);
 
   const filtered = useMemo(() => normalizedData.filter(v => {
     const inDate = (!filter.startDate || v.date >= filter.startDate) && (!filter.endDate || v.date <= filter.endDate);
     return inDate &&
       (!filter.category    || v.category === filter.category) &&
-      (!filter.subCategory || v.sub1     === filter.subCategory) &&
+      (!filter.subCategory || [v.sub1, v.sub2, v.sub3, v.sub4, v.sub5].includes(filter.subCategory)) &&
       (!filter.vendor      || v.vendor   === filter.vendor) &&
       (!filter.item        || v.item.toLowerCase().includes(filter.item.toLowerCase()));
   }), [normalizedData, filter]);
@@ -105,10 +117,10 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
       const dateMap: Record<string, any> = {};
       catVouchers.forEach(v => {
         if (!dateMap[v.date]) dateMap[v.date] = { date: v.date };
-        const key = v.sub2 ? `${v.sub1} › ${v.sub2}` : v.sub1;
+        const parts = [v.sub1, v.sub2, v.sub3, v.sub4, v.sub5].filter(Boolean);
+        const key = parts.join(' › ');
         subKeysSet.add(key);
-        dateMap[v.date][key] = (dateMap[v.date][key] || 0) + v.cost_total;
-      });
+        dateMap[v.date][key] = (dateMap[v.date][key] || 0) + v.cost_total;      });
       return {
         name: catName, total: catVouchers.reduce((s, v) => s + v.cost_total, 0),
         data: Object.values(dateMap).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),

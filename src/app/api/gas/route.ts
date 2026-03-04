@@ -117,8 +117,53 @@ export async function POST(req: NextRequest) {
         const isCashIn = item.type?.trim().toLowerCase() === 'cash in';
         const amount = parseFloat(item.cost_total) || 0;
         const emoji = isCashIn ? '📥' : '📤';
-        const msg = `${emoji} *${item.type?.toUpperCase()}*\n\n👤 *By:* ${item.entered_by}\n💳 *Account:* ${item.account}\n🏷️ *Vendor:* ${item.vendor || '—'}\n📦 *Item:* ${item.item_description}\n💰 *Amount:* ${amount.toLocaleString()} MMK\n🗂️ *Category:* ${item.category || '—'}\n🧾 *Voucher:* ${item.voucherno || '—'}`;
-        console.log('[Telegram] Sending to chat:', TELEGRAM_CHAT_ID);
+
+        // ✅ Sub-categories တွဲပြ
+        const subCats = [item.sub_1 || item.sub1, item.sub_2 || item.sub2, item.sub_3 || item.sub3, item.sub_4 || item.sub4, item.sub_5 || item.sub5]
+          .filter(Boolean).join(' › ');
+        const categoryLine = subCats ? `${item.category} › ${subCats}` : (item.category || '—');
+
+        // ✅ GAS မှ vouchers အားလုံး ယူပြီး totalIn/totalOut တွက်
+        let totalIn = 0, totalOut = 0;
+        try {
+          const gasRes = await fetch(`${GAS_URL}?t=${Date.now()}`, { cache: 'no-store' });
+          const gasData = await gasRes.json();
+          const vouchers: any[] = gasData.vouchers || [];
+          vouchers.forEach((v: any) => {
+            const vType = (v.type || '').toString().trim().toLowerCase();
+            if (vType === 'cash in') {
+              totalIn += Math.round(Number(v.income || v.Income || v['cost_(total)'] || v.cost_total || 0));
+            } else {
+              totalOut += Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
+            }
+          });
+          // ✅ ခု submit လုပ်တဲ့ item ပါ ထည့်တွက်
+          if (isCashIn) totalIn += amount; else totalOut += amount;
+        } catch { /* silent */ }
+
+        const balance = totalIn - totalOut;
+        const balanceEmoji = balance >= 0 ? '🟢' : '🔴';
+
+        const msg = [
+          `${emoji} *${item.type?.toUpperCase()}*`,
+          ``,
+          `👤 *By:* ${item.entered_by}`,
+          `💳 *Account:* ${item.account}`,
+          `🏷️ *Vendor:* ${item.vendor || '—'}`,
+          `📦 *Item:* ${item.item_description}`,
+          `💰 *Amount:* ${amount.toLocaleString()} MMK`,
+          `🗂️ *Category:* ${categoryLine}`,
+          `🧾 *Voucher:* ${item.voucherno || '—'}`,
+          ``,
+          `*Grand Total Cost >>*`,
+          `${'═'.repeat(20)}`,
+          `📊 *Account Balance*`,
+          `📈 Total In:  ${totalIn.toLocaleString()} MMK`,
+          `📉 Total Out: ${totalOut.toLocaleString()} MMK`,
+          `${balanceEmoji} Balance:    ${balance.toLocaleString()} MMK`,
+          balance < 0 ? `\n⚠️ *WARNING: BALANCE IS NEGATIVE!*` : '',
+        ].filter(l => l !== undefined).join('\n');
+
         fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -29,7 +29,14 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
 
   const [filter, setFilter] = useState({ startDate: '', endDate: '', category: '', subCategory: '', vendor: '', item: '' });
   const [selectedImg, setSelectedImg] = useState<string | null>(null);
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; voucherno: string; confirmInput: string; loading: boolean; }>({ open: false, voucherno: '', confirmInput: '', loading: false });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (!onRefresh || isRefreshing) return;
+    setIsRefreshing(true);
+    await onRefresh();
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
 
   const normalizedData = useMemo(() => {
     return (vouchers || []).map(v => {
@@ -184,8 +191,8 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
         <FilterSelect label="SUB-CATEGORY" value={filter.subCategory} options={subCategoryOptions} onChange={v => setFilter({ ...filter, subCategory: v })}/>
         <FilterSelect label="VENDOR"       value={filter.vendor}      options={vendorOptions}      onChange={v => setFilter({ ...filter, vendor: v })}/>
         <input type="text" placeholder="ITEM..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-black text-slate-950 uppercase min-w-[120px]" value={filter.item} onChange={e => setFilter({ ...filter, item: e.target.value })}/>
-        <button onClick={onRefresh} className="p-2.5 px-4 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs hover:bg-slate-100 font-black flex items-center gap-2">
-          <RefreshCcw size={13}/> REFRESH
+        <button onClick={handleRefresh} disabled={isRefreshing} className="p-2.5 px-4 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs hover:bg-slate-100 font-black flex items-center gap-2 disabled:opacity-50">
+          <RefreshCcw size={13} className={isRefreshing ? 'animate-spin' : ''}/> REFRESH
         </button>
         <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', subCategory: '', vendor: '', item: '' })} className="p-2.5 px-4 bg-slate-200 text-slate-950 rounded-lg text-xs hover:bg-slate-300 font-black">CLEAR</button>
         <Link href="/report" className="p-2.5 px-6 bg-slate-950 text-white rounded-lg text-xs hover:bg-slate-800 font-black flex items-center gap-2 ml-auto shadow-sm"><Printer size={14}/> PRINT REPORT</Link>

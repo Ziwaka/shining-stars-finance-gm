@@ -5,10 +5,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2, ShieldAlert } from 'lucide-react';
 import { deleteFromSheet } from '@/lib/api';
 
-const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f97316', '#84cc16'];
+const COLORS = ['#cbd5e1', '#e2e8f0', '#f1f5f9', '#94a3b8', '#64748b', '#475569', '#cbd5e1', '#f1f5f9'];
 
 export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouchers: any[], onRefresh?: () => void }) {
-  const [filter, setFilter] = useState({ startDate: '', endDate: '', category: '', sub1: '', sub2: '', sub3: '', sub4: '', sub5: '', vendor: '' });
+  const [filter, setFilter] = useState({ startDate: '', endDate: '', category: '', item: '', vendor: '' });
   const [selectedImg, setSelectedImg] = useState<string | null>(null);
 
   // ✅ Delete confirmation modal state
@@ -20,19 +20,23 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
   const normalizedData = useMemo(() => {
     return (vouchers || []).map(v => {
       const rawDate = v.date || v.Date || '';
-      // ✅ Date normalize — UTC shift မဖြစ်အောင် string အနေနဲ့ ဆက်သုံးမည်
-      // GAS က Date object လာရင် toISOString ဖြင့် split၊ string ဆိုရင် တိုက်ရိုက် substring
-      const rawStr = rawDate instanceof Date
-        ? rawDate.toISOString().split('T')[0]
-        : rawDate.toString().replace(/T.*$/, '').substring(0, 10);
-      const cleanDate = rawStr;
-      const rawAmount = v['cost_(total)'] || v.cost_total || v.Cost_Total || 0;
+      const cleanDate = rawDate.toString().split('T')[0]; 
+      const rawCost   = v['cost_(total)'] || v.cost_total || v.Cost_Total || 0;
+      const rawIncome = v.income || v.Income || 0;
+      const typeStr   = (v.type || v.Type || "Cash Out").toString().trim();
+
+      // ✅ Cash In ဆိုရင် income column ကို ယူ၊ Cash Out ဆိုရင် cost_total ကို ယူ
+      const isCashIn  = typeStr.toLowerCase() === "cash in";
+      const amount    = isCashIn
+        ? Math.round(Number(rawIncome) || Number(rawCost) || 0)
+        : Math.round(Number(rawCost) || 0);
+
       const itemName = v.item_description || v['item_description'] || v.item || v.Item || '';
 
       return {
         date: cleanDate.toString(),
         voucherno: (v.voucher_no || v.voucherno || '').toString(),
-        type: (v.type || v.Type || "Cash Out").toString().trim(),
+        type: typeStr,
         category: (v.category || v.Category || "UNCLASSIFIED").toString().toUpperCase(),
         sub1: (v.sub_1 || v.sub1 || "GENERAL").toString().toUpperCase(),
         sub2: (v.sub_2 || v.sub2 || "").toString().toUpperCase(),
@@ -42,72 +46,37 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
         item: itemName.toString(),
         vendor: (v.vendor || v.Vendor || '').toString(),
         note: (v.note || v.Note || '').toString().toUpperCase(),
-        cost_total: Math.round(Number(rawAmount) || 0), 
+        cost_total: amount,   // ✅ Cash In → income value, Cash Out → cost value
         image_data: (v.image_data || v.Image_Data || '').toString(),
-        entered_by: (v.entered_by || v.Entered_By || 'GM').toString().toUpperCase(),
-        account: (v.account || v.Account || 'GM ACCOUNT').toString().toUpperCase()
+        entered_by: (v.entered_by || v.Entered_By || '').toString().toUpperCase(),
+        account: (v.account || v.Account || '').toString().toUpperCase()
       };
     });
   }, [vouchers]);
-
-  // ✅ Dropdown options from data
-  const filterOptions = useMemo(() => {
-    const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean))).sort();
-    const cats = uniq(normalizedData.map(v => v.category));
-    const sub1s = uniq(normalizedData.filter(v => !filter.category || v.category === filter.category).map(v => v.sub1));
-    const sub2s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1)).map(v => v.sub2));
-    const sub3s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1) && (!filter.sub2 || v.sub2 === filter.sub2)).map(v => v.sub3));
-    const sub4s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1) && (!filter.sub2 || v.sub2 === filter.sub2) && (!filter.sub3 || v.sub3 === filter.sub3)).map(v => v.sub4));
-    const sub5s = uniq(normalizedData.filter(v => (!filter.category || v.category === filter.category) && (!filter.sub1 || v.sub1 === filter.sub1) && (!filter.sub2 || v.sub2 === filter.sub2) && (!filter.sub3 || v.sub3 === filter.sub3) && (!filter.sub4 || v.sub4 === filter.sub4)).map(v => v.sub5));
-    const vendors = uniq(normalizedData.map(v => v.vendor));
-    return { cats, sub1s, sub2s, sub3s, sub4s, sub5s, vendors };
-  }, [normalizedData, filter.category, filter.sub1, filter.sub2, filter.sub3, filter.sub4]);
 
   const filtered = useMemo(() => {
     return normalizedData.filter(v => {
       const inDateRange = (!filter.startDate || v.date >= filter.startDate) && (!filter.endDate || v.date <= filter.endDate);
       return inDateRange &&
-        (!filter.category || v.category === filter.category) &&
-        (!filter.sub1 || v.sub1 === filter.sub1) &&
-        (!filter.sub2 || v.sub2 === filter.sub2) &&
-        (!filter.sub3 || v.sub3 === filter.sub3) &&
-        (!filter.sub4 || v.sub4 === filter.sub4) &&
-        (!filter.sub5 || v.sub5 === filter.sub5) &&
-        (!filter.vendor || v.vendor === filter.vendor);
+        v.category.toLowerCase().includes(filter.category.toLowerCase()) &&
+        v.item.toLowerCase().includes(filter.item.toLowerCase()) &&
+        v.vendor.toLowerCase().includes(filter.vendor.toLowerCase());
     });
   }, [normalizedData, filter]);
 
   const categorySpecificData = useMemo(() => {
-    const cats = Array.from(new Set(filtered.map(v => v.category)));
+    const cats = Array.from(new Set(filtered.filter(v => v.type === "Cash Out").map(v => v.category)));
     return cats.map(catName => {
       const catVouchers = filtered.filter(v => v.category === catName);
-      // Group by month for x-axis
-      const monthMap: any = {};
-      const subKeysIn = new Set<string>();
-      const subKeysOut = new Set<string>();
+      const subKeysSet = new Set<string>();
+      const dateMap: any = {};
       catVouchers.forEach(v => {
-        const month = v.date ? v.date.substring(0, 7) : v.date;
-        if (!monthMap[month]) monthMap[month] = { date: month };
-        // Sub key = sub1 > sub2 > sub3 chain
-        const subParts = [v.sub1, v.sub2, v.sub3].filter(s => s && s !== 'GENERAL' && s !== '');
-        const subKey = subParts.length > 0 ? subParts.join(' > ') : 'GENERAL';
-        if (v.type === 'Cash In') {
-          const k = `IN: ${subKey}`;
-          subKeysIn.add(k);
-          monthMap[month][k] = (monthMap[month][k] || 0) + v.cost_total;
-        } else {
-          const k = `OUT: ${subKey}`;
-          subKeysOut.add(k);
-          monthMap[month][k] = (monthMap[month][k] || 0) + v.cost_total;
-        }
+        if (!dateMap[v.date]) dateMap[v.date] = { date: v.date };
+        const key = v.sub2 ? `${v.sub1} - ${v.sub2}` : v.sub1;
+        subKeysSet.add(key);
+        dateMap[v.date][key] = (dateMap[v.date][key] || 0) + v.cost_total;
       });
-      const data = Object.values(monthMap).sort((a: any, b: any) => a.date.localeCompare(b.date));
-      return {
-        name: catName,
-        data,
-        inKeys: Array.from(subKeysIn),
-        outKeys: Array.from(subKeysOut),
-      };
+      return { name: catName, data: Object.keys(dateMap).map(k => dateMap[k]).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()), subKeys: Array.from(subKeysSet) };
     });
   }, [filtered]);
 
@@ -150,8 +119,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
     try {
       await deleteFromSheet(deleteModal.voucherno);
       setDeleteModal({ open: false, voucherno: '', confirmInput: '', loading: false });
-      // ✅ GAS processing time အနည်းငယ်ပေးပြီးမှ refresh လုပ်မည်
-      setTimeout(() => { if (onRefresh) onRefresh(); }, 1500);
+      if (onRefresh) onRefresh();
     } catch {
       setDeleteModal(m => ({ ...m, loading: false }));
       alert("FAILED TO DELETE TRANSACTION.");
@@ -173,65 +141,17 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
       )}
 
       {/* FILTER BAR */}
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 font-black print:hidden space-y-3">
-        <div className="flex items-center gap-2 mb-1">
-          <Filter className="text-slate-400" size={16}/>
-          <span className="text-[10px] tracking-widest text-slate-500 font-black">FILTER</span>
-        </div>
-        {/* Row 1: Date + Vendor */}
-        <div className="flex flex-wrap gap-3 items-center">
-          <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[130px]" value={filter.startDate} onChange={e => setFilter({...filter, startDate: e.target.value})} />
-          <span className="text-[10px] text-slate-400 font-black">TO</span>
-          <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[130px]" value={filter.endDate} onChange={e => setFilter({...filter, endDate: e.target.value})} />
-          <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[130px] uppercase" value={filter.vendor} onChange={e => setFilter({...filter, vendor: e.target.value})}>
-            <option value="">ALL VENDORS</option>
-            {filterOptions.vendors.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </div>
-        {/* Row 2: Category + Subs (cascade) */}
-        <div className="flex flex-wrap gap-3 items-center">
-          <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.category} onChange={e => setFilter({...filter, category: e.target.value, sub1:'', sub2:'', sub3:'', sub4:'', sub5:''})}>
-            <option value="">ALL CATEGORIES</option>
-            {filterOptions.cats.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          {filterOptions.sub1s.filter(s => s && s !== 'GENERAL').length > 0 && (
-            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub1} onChange={e => setFilter({...filter, sub1: e.target.value, sub2:'', sub3:'', sub4:'', sub5:''})}>
-              <option value="">ALL SUB 1</option>
-              {filterOptions.sub1s.filter(s => s && s !== 'GENERAL').map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
-          {filter.sub1 && filterOptions.sub2s.filter(Boolean).length > 0 && (
-            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub2} onChange={e => setFilter({...filter, sub2: e.target.value, sub3:'', sub4:'', sub5:''})}>
-              <option value="">ALL SUB 2</option>
-              {filterOptions.sub2s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
-          {filter.sub2 && filterOptions.sub3s.filter(Boolean).length > 0 && (
-            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub3} onChange={e => setFilter({...filter, sub3: e.target.value, sub4:'', sub5:''})}>
-              <option value="">ALL SUB 3</option>
-              {filterOptions.sub3s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
-          {filter.sub3 && filterOptions.sub4s.filter(Boolean).length > 0 && (
-            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub4} onChange={e => setFilter({...filter, sub4: e.target.value, sub5:''})}>
-              <option value="">ALL SUB 4</option>
-              {filterOptions.sub4s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
-          {filter.sub4 && filterOptions.sub5s.filter(Boolean).length > 0 && (
-            <select className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none font-black text-slate-950 flex-1 min-w-[120px] uppercase" value={filter.sub5} onChange={e => setFilter({...filter, sub5: e.target.value})}>
-              <option value="">ALL SUB 5</option>
-              {filterOptions.sub5s.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
-        </div>
-        {/* Row 3: Actions */}
-        <div className="flex gap-3 items-center justify-end">
-          <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', sub1:'', sub2:'', sub3:'', sub4:'', sub5:'', vendor: '' })} className="p-2.5 px-5 bg-slate-200 text-slate-950 rounded-xl text-xs hover:bg-slate-300 transition-all font-black">CLEAR ALL</button>
-          <Link href="/report" className="p-2.5 px-6 bg-slate-950 text-white rounded-xl text-xs hover:bg-slate-800 transition-all font-black flex items-center gap-2 shadow-sm">
-            <Printer size={16}/> PRINT REPORT
-          </Link>
-        </div>
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-3 items-center font-black print:hidden">
+        <Filter className="text-slate-400" size={18}/>
+        <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-black text-slate-950" value={filter.startDate} onChange={e => setFilter({...filter, startDate: e.target.value})} />
+        <span className="text-[10px] text-slate-400 font-black">TO</span>
+        <input type="date" className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none font-black text-slate-950" value={filter.endDate} onChange={e => setFilter({...filter, endDate: e.target.value})} />
+        <input type="text" placeholder="CATEGORY..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none flex-grow font-black text-slate-950 uppercase" value={filter.category} onChange={e => setFilter({...filter, category: e.target.value})} />
+        <input type="text" placeholder="VENDOR..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none flex-grow font-black text-slate-950 uppercase" value={filter.vendor} onChange={e => setFilter({...filter, vendor: e.target.value})} />
+        <button onClick={() => setFilter({ startDate: '', endDate: '', category: '', item: '', vendor: '' })} className="p-2.5 px-4 bg-slate-200 text-slate-950 rounded-lg text-xs hover:bg-slate-300 transition-all font-black">CLEAR</button>
+        <Link href="/report" className="p-2.5 px-6 bg-slate-950 text-white rounded-lg text-xs hover:bg-slate-800 transition-all font-black flex items-center gap-2 ml-auto shadow-sm">
+          <Printer size={16}/> PRINT REPORT
+        </Link>
       </div>
 
       {/* 🔴 SOFT PASTEL TILES 🔴 */}
@@ -256,36 +176,22 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
           <h3 className="text-[10px] text-slate-500 mb-6 flex items-center gap-2 font-black"><TrendingUp size={16}/> TRENDS</h3>
           <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={analytics.trends} barCategoryGap="30%">
-                <CartesianGrid vertical={false} stroke="#f1f5f9"/>
-                <XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 900, fill: '#64748b'}} tickFormatter={(v: string) => v.length > 7 ? v.substring(5) : v}/>
-                <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: any) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}/>
-                <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'}/>
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 900, color: '#0f172a' }}/>
-                <Bar dataKey="income" fill="#10b981" name="Cash In" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expense" fill="#f43f5e" name="Cash Out" radius={[4, 4, 0, 0]} />
+              <BarChart data={analytics.trends}>
+                <CartesianGrid vertical={false} stroke="#f1f5f9"/><XAxis dataKey="date" hide/><YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a' }}/><Tooltip/><Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 900, color: '#0f172a' }}/>
+                <Bar dataKey="income" fill="#10b981" name="IN" radius={[4, 4, 0, 0]} /><Bar dataKey="expense" fill="#f43f5e" name="OUT" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 min-h-[320px]">
-          <h3 className="text-[10px] text-slate-500 mb-6 flex items-center gap-2 font-black"><Layers size={16}/> ALLOCATION (CASH OUT)</h3>
+          <h3 className="text-[10px] text-slate-500 mb-6 flex items-center gap-2 font-black"><Layers size={16}/> ALLOCATION</h3>
           <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie
-                  data={analytics.categories}
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={4}
-                  dataKey="value"
-                  stroke="none"
-                  label={({ name, percent, x, y }: any) => (<text x={x} y={y} fill="#0f172a" fontSize={9} fontWeight={900} textAnchor="middle" dominantBaseline="central">{`${name.length > 7 ? name.substring(0,7)+".." : name} ${(percent*100).toFixed(0)}%`}</text>)}
-                  labelLine={true}
-                >
+                <Pie data={analytics.categories} innerRadius={60} outerRadius={90} paddingAngle={6} dataKey="value" stroke="none">
                   {analytics.categories.map((_:any, i:any) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
                 </Pie>
-                <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'}/>
+                <Tooltip/><Legend wrapperStyle={{ fontSize: '10px', fontWeight: 900, color: '#0f172a' }}/>
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -299,113 +205,20 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {categorySpecificData.map((catChart, idx) => (
-            <div key={idx} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 min-h-[340px]">
-              <h4 className="text-xs text-slate-600 tracking-widest mb-2 font-black">{catChart.name}</h4>
-              <div className="flex gap-4 mb-4 text-[9px] font-black">
-                <span className="text-emerald-600">● CASH IN ({catChart.inKeys.length} sub)</span>
-                <span className="text-rose-500">● CASH OUT ({catChart.outKeys.length} sub)</span>
-              </div>
-              <div className="h-[260px] w-full">
+            <div key={idx} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 min-h-[320px]">
+              <h4 className="text-xs text-slate-500 tracking-widest mb-6 font-black">{catChart.name}</h4>
+              <div className="h-[240px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={catChart.data} barCategoryGap="25%">
-                    <CartesianGrid vertical={false} stroke="#f1f5f9"/>
-                    <XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 900, fill: '#64748b'}} tickFormatter={(v: string) => v.length > 7 ? v.substring(5) : v}/>
-                    <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: any) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}/>
-                    <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'}/>
-                    <Legend iconType="rect" wrapperStyle={{ fontSize: '9px', fontWeight: 900, color: '#0f172a' }}/>
-                    {/* Cash In subs — stacked green tones */}
-                    {catChart.inKeys.map((sub, sIdx) => (
-                      <Bar key={sub} dataKey={sub} stackId="in" fill={['#10b981','#34d399','#6ee7b7','#a7f3d0'][sIdx % 4]} name={sub} radius={sIdx === catChart.inKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
-                    ))}
-                    {/* Cash Out subs — stacked colorful */}
-                    {catChart.outKeys.map((sub, sIdx) => (
-                      <Bar key={sub} dataKey={sub} stackId="out" fill={COLORS[sIdx % COLORS.length]} name={sub} radius={sIdx === catChart.outKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
+                  <BarChart data={catChart.data}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9"/><XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}}/><YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}}/><Tooltip/><Legend iconType="rect" wrapperStyle={{ fontSize: '10px', fontWeight: 900, color: '#0f172a' }}/>
+                    {catChart.subKeys.map((sub, sIdx) => (
+                      <Bar key={sub} dataKey={sub} stackId="a" fill={COLORS[sIdx % COLORS.length]} name={sub} radius={sIdx === catChart.subKeys.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           ))}
-        </div>
-      </div>
-
-
-      {/* ✅ Monthly Summary Table */}
-      <div className="space-y-4 font-black">
-        <div className="flex items-center gap-3 px-2">
-          <TrendingUp className="text-slate-400" size={24} />
-          <h2 className="text-xl tracking-tight font-black text-slate-950 uppercase">Monthly Summary</h2>
-        </div>
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-          {/* ✅ Mobile: card layout, Desktop: table layout */}
-          <div className="hidden md:block">
-            <table className="w-full text-left font-black uppercase">
-              <thead className="bg-slate-100 text-[10px] text-slate-500 border-b border-slate-200">
-                <tr>
-                  <th className="py-4 px-6 font-black text-slate-950">Month</th>
-                  <th className="py-4 px-6 text-right font-black text-emerald-700">Cash In</th>
-                  <th className="py-4 px-6 text-right font-black text-rose-700">Cash Out</th>
-                  <th className="py-4 px-6 text-right font-black text-slate-950">Balance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {(() => {
-                  const monthMap: Record<string, {in: number, out: number}> = {};
-                  normalizedData.forEach(v => {
-                    const m = v.date ? v.date.substring(0, 7) : 'Unknown';
-                    if (!monthMap[m]) monthMap[m] = {in: 0, out: 0};
-                    if (v.type === 'Cash In') monthMap[m].in += v.cost_total;
-                    else monthMap[m].out += v.cost_total;
-                  });
-                  return Object.keys(monthMap).sort().reverse().map(m => {
-                    const bal = monthMap[m].in - monthMap[m].out;
-                    return (
-                      <tr key={m} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-4 px-6 text-sm font-black text-slate-950">{m}</td>
-                        <td className="py-4 px-6 text-right text-sm font-black text-emerald-600">+{monthMap[m].in.toLocaleString()}</td>
-                        <td className="py-4 px-6 text-right text-sm font-black text-rose-600">-{monthMap[m].out.toLocaleString()}</td>
-                        <td className={`py-4 px-6 text-right text-sm font-black ${bal >= 0 ? 'text-slate-950' : 'text-rose-600'}`}>{bal >= 0 ? '+' : ''}{bal.toLocaleString()}</td>
-                      </tr>
-                    );
-                  });
-                })()}
-              </tbody>
-            </table>
-          </div>
-          {/* ✅ Mobile card layout */}
-          <div className="md:hidden divide-y divide-slate-100">
-            {(() => {
-              const monthMap: Record<string, {in: number, out: number}> = {};
-              normalizedData.forEach(v => {
-                const m = v.date ? v.date.substring(0, 7) : 'Unknown';
-                if (!monthMap[m]) monthMap[m] = {in: 0, out: 0};
-                if (v.type === 'Cash In') monthMap[m].in += v.cost_total;
-                else monthMap[m].out += v.cost_total;
-              });
-              return Object.keys(monthMap).sort().reverse().map(m => {
-                const bal = monthMap[m].in - monthMap[m].out;
-                return (
-                  <div key={m} className="p-5 space-y-3">
-                    <div className="text-base font-black text-slate-950">{m}</div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-emerald-50 rounded-2xl p-3 text-center">
-                        <div className="text-[9px] text-emerald-600 font-black mb-1">CASH IN</div>
-                        <div className="text-xs font-black text-emerald-700">+{monthMap[m].in.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-rose-50 rounded-2xl p-3 text-center">
-                        <div className="text-[9px] text-rose-600 font-black mb-1">CASH OUT</div>
-                        <div className="text-xs font-black text-rose-700">-{monthMap[m].out.toLocaleString()}</div>
-                      </div>
-                      <div className={`rounded-2xl p-3 text-center ${bal >= 0 ? 'bg-slate-100' : 'bg-rose-50'}`}>
-                        <div className="text-[9px] text-slate-500 font-black mb-1">BALANCE</div>
-                        <div className={`text-xs font-black ${bal >= 0 ? 'text-slate-950' : 'text-rose-700'}`}>{bal >= 0 ? '+' : ''}{bal.toLocaleString()}</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
         </div>
       </div>
 

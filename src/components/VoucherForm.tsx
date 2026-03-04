@@ -23,7 +23,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [sub4, setSub4] = useState('');
   const [sub5, setSub5] = useState('');
 
-  const [currentItem, setCurrentItem] = useState({ item_description: '', count: '' as any, cost_piece: '' as any, note: '' });
+  const [currentItem, setCurrentItem] = useState({ item_description: '', brand: '', count: '' as any, cost_piece: '' as any, note: '' });
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [toastMsg, setToastMsg] = useState('');
 
@@ -183,7 +183,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const resetForm = () => {
     setVendor(''); setSupplierSearch(''); setSelectedSupplier(null);
     setCategory(''); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
-    setCurrentItem({ item_description: '', count: '', cost_piece: '', note: '' });
+    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '' });
     setItemSearch(''); setImage(''); setVoucherno('');
     setSubmitStatus('idle');
   };
@@ -204,7 +204,9 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       vendor_address: selectedSupplier?.address || '',
       vendor_service: selectedSupplier?.service || '',
       category, sub1, sub2, sub3, sub4, sub5,
-      item_description: currentItem.item_description, note: currentItem.note,
+      item_description: currentItem.item_description,
+      brand: currentItem.brand || '',
+      note: currentItem.note,
       count: countNum, cost_piece: costNum, cost_total: total, image_data: image, id: Date.now()
     };
     
@@ -213,7 +215,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
     setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`);
     setTimeout(() => setToastMsg(''), 3000);
-    setCurrentItem({ item_description: '', count: '', cost_piece: '', note: '' });
+    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '' });
     setItemSearch('');
     setImage('');
   };
@@ -224,9 +226,12 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     if (itemList.length === 0 || submitStatus === 'processing') return;
     setSubmitStatus('processing');
     try {
+      // ✅ Items အားလုံး GAS သို့ ပို့ (Telegram မပါ)
       for (const item of itemList) {
-        await sendToSheet(item); // ✅ sendToSheet ထဲမှာ Telegram noti ပါ server-side မှ ပေးပို့ပြီ
+        await sendToSheet(item);
       }
+      // ✅ အားလုံး ပြီးမှ Telegram တစ်ကြောင်းတည်း ပို့
+      await sendTelegramSummary(itemList);
       setSubmitStatus('success');
       setItemList([]);
       setVoucherno('');
@@ -236,6 +241,14 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       setSubmitStatus('error');
       setTimeout(() => setSubmitStatus('idle'), 3000);
     }
+  };
+
+  const sendTelegramSummary = async (items: any[]) => {
+    await fetch('/api/gas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'telegramSummary', items }),
+    });
   };
 
   return (
@@ -506,7 +519,18 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 font-black">
+            {/* Brand — optional */}
+            <div className="space-y-1 font-black">
+              <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1 font-black">
+                BRAND <span className="text-slate-300 normal-case font-normal">(optional)</span>
+              </label>
+              <input
+                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400 uppercase font-black text-slate-950 placeholder:text-slate-300"
+                placeholder="e.g. TOYOTA, SAMSUNG..."
+                value={currentItem.brand}
+                onChange={e => setCurrentItem({...currentItem, brand: e.target.value})}
+              />
+            </div>
               <div className="space-y-1 font-black">
                 <label className="text-[10px] text-slate-500 uppercase flex items-center font-black"><Hash size={12} className="mr-1 font-black" /> QTY</label>
                 <input type="number" step="any" className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xl text-center text-slate-950 outline-none focus:border-slate-500 font-black" value={currentItem.count} onChange={e => setCurrentItem({...currentItem, count: e.target.value})} />
@@ -559,7 +583,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               <div className="flex justify-between items-start font-black">
                 <div className="space-y-1 font-black">
                   <p className="text-[10px] text-slate-500 font-black">{i.voucherno}</p>
-                  <p className="text-xs leading-tight font-black text-slate-950">{i.item_description}</p>
+                  <p className="text-xs leading-tight font-black text-slate-950">{i.item_description}{i.brand ? <span className="text-slate-400 font-normal ml-1">({i.brand})</span> : ''}</p>
                   <p className="text-[8px] text-slate-600 uppercase font-black">[{i.entered_by} • {i.account}]</p>
                 </div>
                 <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="text-rose-500 p-1 font-black"><Trash2 size={14} className="font-black"/></button>

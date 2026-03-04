@@ -242,7 +242,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
                       <CartesianGrid vertical={false} stroke="#f1f5f9"/>
                       <XAxis dataKey="date" tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} tickLine={false} axisLine={false}/>
                       <YAxis tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} tickLine={false} axisLine={false} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v}/>
-                      <Tooltip formatter={(val: any) => [`${Number(val).toLocaleString()} MMK`]}/>
+                     formatter={(val: any) => [`${Number(val).toLocaleString()} MMK`]}
                       <Legend iconType="rect" wrapperStyle={{ fontSize: 9, fontWeight: 900 }}/>
                       {catChart.subKeys.map((sub, sIdx) => (
                         <Bar key={sub} dataKey={sub} stackId="a" fill={COLORS[sIdx % COLORS.length]} name={sub} radius={sIdx === catChart.subKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
@@ -367,3 +367,4 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
     </div>
   );
 }
+

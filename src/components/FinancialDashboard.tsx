@@ -302,34 +302,50 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
           <h2 className="text-xl tracking-tight uppercase font-black text-slate-950">SUB-CATEGORY BREAKDOWN</h2>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {categorySpecificData.map((catChart, idx) => (
-            <div key={idx} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 min-h-[340px]">
-              <h4 className="text-xs text-slate-600 tracking-widest mb-2 font-black">{catChart.name}</h4>
-              <div className="flex gap-4 mb-4 text-[9px] font-black">
-                <span className="text-emerald-600">● CASH IN ({catChart.inKeys.length} sub)</span>
-                <span className="text-rose-500">● CASH OUT ({catChart.outKeys.length} sub)</span>
-              </div>
-              <div className="h-[260px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={catChart.data} barCategoryGap="25%">
-                    <CartesianGrid vertical={false} stroke="#f1f5f9"/>
-                    <XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 900, fill: '#64748b'}} tickFormatter={(v: string) => v.length > 7 ? v.substring(5) : v}/>
-                    <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: any) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)}/>
-                    <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'}/>
-                    <Legend iconType="rect" wrapperStyle={{ fontSize: '9px', fontWeight: 900, color: '#0f172a' }}/>
-                    {/* Cash In subs — stacked green tones */}
-                    {catChart.inKeys.map((sub, sIdx) => (
-                      <Bar key={sub} dataKey={sub} stackId="in" fill={['#10b981','#34d399','#6ee7b7','#a7f3d0'][sIdx % 4]} name={sub} radius={sIdx === catChart.inKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
+          {categorySpecificData.map((catChart, idx) => {
+            const totalIn  = catChart.inKeys.reduce((s: number, k: string) => s + catChart.data.reduce((ss: number, d: any) => ss + (d[k] || 0), 0), 0);
+            const totalOut = catChart.outKeys.reduce((s: number, k: string) => s + catChart.data.reduce((ss: number, d: any) => ss + (d[k] || 0), 0), 0);
+            return (
+              <div key={idx} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-200">
+                {/* Header */}
+                <div className="flex justify-between items-start mb-3">
+                  <h4 className="text-xs text-slate-600 tracking-widest font-black">{catChart.name}</h4>
+                  <div className="text-right space-y-0.5">
+                    {totalIn > 0 && <p className="text-[10px] font-black text-emerald-600">▲ {totalIn.toLocaleString()}</p>}
+                    {totalOut > 0 && <p className="text-[10px] font-black text-rose-500">▼ {totalOut.toLocaleString()}</p>}
+                  </div>
+                </div>
+                {/* Sub key pills — scrollable, no chart legend */}
+                {(catChart.inKeys.length > 0 || catChart.outKeys.length > 0) && (
+                  <div className="flex flex-wrap gap-1 mb-3 max-h-[52px] overflow-y-auto">
+                    {catChart.inKeys.map((k: string) => (
+                      <span key={k} className="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">{k.replace('IN: ','')}</span>
                     ))}
-                    {/* Cash Out subs — stacked colorful */}
-                    {catChart.outKeys.map((sub, sIdx) => (
-                      <Bar key={sub} dataKey={sub} stackId="out" fill={COLORS[sIdx % COLORS.length]} name={sub} radius={sIdx === catChart.outKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
+                    {catChart.outKeys.map((k: string) => (
+                      <span key={k} className="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200 whitespace-nowrap">{k.replace('OUT: ','')}</span>
                     ))}
-                  </BarChart>
-                </ResponsiveContainer>
+                  </div>
+                )}
+                {/* Chart — no Legend */}
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={catChart.data} barCategoryGap="25%">
+                      <CartesianGrid vertical={false} stroke="#f1f5f9"/>
+                      <XAxis dataKey="date" tick={{fontSize: 9, fontWeight: 900, fill: '#64748b'}} tickFormatter={(v: any) => v.length > 7 ? v.substring(5) : v}/>
+                      <YAxis tick={{fontSize: 9, fontWeight: 900, fill: '#0f172a'}} tickFormatter={(v: any) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} width={36}/>
+                      <Tooltip formatter={(v: any) => v.toLocaleString() + ' MMK'} wrapperStyle={{fontSize: '10px'}}/>
+                      {catChart.inKeys.map((sub: string, sIdx: number) => (
+                        <Bar key={sub} dataKey={sub} stackId="in" fill={['#10b981','#34d399','#6ee7b7','#a7f3d0'][sIdx % 4]} name={sub.replace('IN: ','')} radius={sIdx === catChart.inKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
+                      ))}
+                      {catChart.outKeys.map((sub: string, sIdx: number) => (
+                        <Bar key={sub} dataKey={sub} stackId="out" fill={COLORS[sIdx % COLORS.length]} name={sub.replace('OUT: ','')} radius={sIdx === catChart.outKeys.length - 1 ? [4,4,0,0] : [0,0,0,0]}/>
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

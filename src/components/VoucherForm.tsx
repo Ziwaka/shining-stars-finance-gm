@@ -196,7 +196,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   };
 
   return (
-    <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950 uppercase">
+    <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950">
 
       {toastMsg && (
         <div className="absolute top-4 right-4 bg-emerald-50 border border-emerald-200 text-slate-950 p-4 rounded-xl shadow-lg flex items-center gap-3 z-50 animate-bounce font-black">
@@ -237,7 +237,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             <label className="text-[10px] text-slate-500 tracking-widest font-black">SUPPLIER</label>
             <div className="relative">
               <input
-                className="w-full bg-white border border-slate-300 p-3 pr-10 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950 uppercase"
+                className="w-full bg-white border border-slate-300 p-3 pr-10 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950 "
                 value={supplierSearch}
                 onChange={e => { setSupplierSearch(e.target.value); setVendor(e.target.value); setSelectedSupplier(null); setSupplierDropdown(true); }}
                 onFocus={() => setSupplierDropdown(true)}
@@ -291,7 +291,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                 {[{ key: 'name', label: 'NAME', icon: <User size={10}/> }, { key: 'phone', label: 'PHONE', icon: <Phone size={10}/> }, { key: 'address', label: 'ADDRESS', icon: <MapPin size={10}/> }, { key: 'service', label: 'SERVICE', icon: <Briefcase size={10}/> }].map(({ key, label, icon }) => (
                   <div key={key} className="flex items-center gap-2">
                     <span className="text-slate-400">{icon}</span>
-                    <input className="flex-1 bg-slate-50 border border-slate-200 p-2 rounded-lg text-[11px] outline-none uppercase font-black text-slate-950" placeholder={label} value={(newSupplier as any)[key]} onChange={e => setNewSupplier({ ...newSupplier, [key]: e.target.value })}/>
+                    <input className="flex-1 bg-slate-50 border border-slate-200 p-2 rounded-lg text-[11px] outline-none font-black text-slate-950" placeholder={label} value={(newSupplier as any)[key]} onChange={e => setNewSupplier({ ...newSupplier, [key]: e.target.value })}/>
                   </div>
                 ))}
                 <div className="flex gap-2 pt-1">
@@ -380,7 +380,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               <label className="text-[10px] text-slate-500 uppercase font-black">ITEM DESCRIPTION</label>
               <div className="relative">
                 <input
-                  className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-sm outline-none focus:border-slate-500 uppercase font-black text-slate-950"
+                  className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-sm outline-none focus:border-slate-500 font-black text-slate-950"
                   placeholder="DETAILS"
                   value={itemSearch}
                   onChange={e => { setItemSearch(e.target.value); setCurrentItem({ ...currentItem, item_description: e.target.value }); setItemDropdown(true); }}
@@ -400,7 +400,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             {/* Brand */}
             <div className="space-y-1">
               <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1 font-black">BRAND <span className="text-slate-300 normal-case font-normal">(optional)</span></label>
-              <input className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400 uppercase font-black text-slate-950 placeholder:text-slate-300" placeholder="e.g. TOYOTA, SAMSUNG..." value={currentItem.brand} onChange={e => setCurrentItem({ ...currentItem, brand: e.target.value })}/>
+              <input className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400 font-black text-slate-950 placeholder:text-slate-300" placeholder="e.g. TOYOTA, SAMSUNG..." value={currentItem.brand} onChange={e => setCurrentItem({ ...currentItem, brand: e.target.value })}/>
             </div>
 
             {/* QTY + Rate */}
@@ -418,7 +418,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             {/* Notes */}
             <div className="space-y-1">
               <label className="text-[10px] text-slate-500 uppercase flex items-center font-black"><MessageSquare size={12} className="mr-2"/> NOTES</label>
-              <textarea className="w-full p-4 bg-white border border-slate-300 rounded-xl text-[10px] outline-none focus:border-slate-500 uppercase h-16 resize-none font-black text-slate-950" value={currentItem.note} onChange={e => setCurrentItem({ ...currentItem, note: e.target.value })}/>
+              <textarea className="w-full p-4 bg-white border border-slate-300 rounded-xl text-[10px] outline-none focus:border-slate-500 h-16 resize-none font-black text-slate-950" value={currentItem.note} onChange={e => setCurrentItem({ ...currentItem, note: e.target.value })}/>
             </div>
 
             {/* Per-item photo */}
@@ -509,11 +509,11 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             <div className="p-6 space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><Phone size={10}/> PHONE</label>
-                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 uppercase" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="09..."/>
+                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 " value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="09..."/>
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><MapPin size={10}/> ADDRESS</label>
-                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 uppercase" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} placeholder="ADDRESS..."/>
+                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 " value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} placeholder="ADDRESS..."/>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><Briefcase size={10}/> SERVICES</label>
@@ -527,7 +527,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                   {editServices.length === 0 && <span className="text-[10px] text-slate-300 italic">NO SERVICES YET</span>}
                 </div>
                 <div className="flex gap-2">
-                  <input className="flex-1 bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-[11px] outline-none focus:border-slate-500 font-black text-slate-950 uppercase" placeholder="ADD SERVICE..." value={newServiceInput} onChange={e => setNewServiceInput(e.target.value)}
+                  <input className="flex-1 bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-[11px] outline-none focus:border-slate-500 font-black text-slate-950 " placeholder="ADD SERVICE..." value={newServiceInput} onChange={e => setNewServiceInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && newServiceInput.trim()) { e.preventDefault(); if (!editServices.includes(newServiceInput.trim())) setEditServices([...editServices, newServiceInput.trim()]); setNewServiceInput(''); } }}/>
                   <button onClick={() => { if (!newServiceInput.trim()) return; if (!editServices.includes(newServiceInput.trim())) setEditServices([...editServices, newServiceInput.trim()]); setNewServiceInput(''); }} className="bg-slate-200 hover:bg-slate-300 text-slate-950 px-3 rounded-xl font-black"><Plus size={14}/></button>
                 </div>

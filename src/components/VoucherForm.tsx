@@ -150,10 +150,13 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const costNum = parseInt(currentItem.cost_piece);
     if (!vendor || !currentItem.item_description || isNaN(countNum)) return alert('REQUIRED: VENDOR, ITEM & QTY');
     const total = Math.round(countNum * costNum);
-    const generatedId = generateVrID(category, itemList);
+
+    // ✅ Vr. No. — batch ထဲ ပထမ item ဆိုရင် generate၊ မဟုတ်ရင် အရင် voucherno ကိုပဲ သုံး
+    const vrNo = itemList.length === 0 ? generateVrID(category, itemList) : voucherno;
+
     const newItem = {
       date, entered_by: enteredBy, account, vendor, type,
-      voucherno: generatedId,
+      voucherno: vrNo,
       vendor_phone: selectedSupplier?.phone || '',
       vendor_address: selectedSupplier?.address || '',
       vendor_service: selectedSupplier?.service || '',
@@ -432,7 +435,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                   <label className="cursor-pointer flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors">
                     <Camera size={24}/>
                     <span className="text-[9px] font-black uppercase">TAP TO ADD PHOTO</span>
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload}/>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload}/>
                   </label>
                 )}
               </div>

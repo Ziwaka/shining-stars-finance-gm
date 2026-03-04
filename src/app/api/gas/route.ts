@@ -115,15 +115,20 @@ export async function POST(req: NextRequest) {
       if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
         const item = body.data;
         const isCashIn = item.type?.trim().toLowerCase() === 'cash in';
-        const amount = isCashIn
-          ? (parseFloat(item.income) || parseFloat(item.cost_total) || 0)
-          : (parseFloat(item.cost_total) || 0);
-        const msg = `🚨 *NEW TRANSACTION*\n\n👤 *By:* ${item.entered_by}\n💳 *Account:* ${item.account}\n📈 *Type:* ${item.type}\n🧾 *Item:* ${item.item_description}\n💰 *Amount:* ${amount.toLocaleString()} MMK`;
+        const amount = parseFloat(item.cost_total) || 0;
+        const emoji = isCashIn ? '📥' : '📤';
+        const msg = `${emoji} *${item.type?.toUpperCase()}*\n\n👤 *By:* ${item.entered_by}\n💳 *Account:* ${item.account}\n🏷️ *Vendor:* ${item.vendor || '—'}\n📦 *Item:* ${item.item_description}\n💰 *Amount:* ${amount.toLocaleString()} MMK\n🗂️ *Category:* ${item.category || '—'}\n🧾 *Voucher:* ${item.voucherno || '—'}`;
+        console.log('[Telegram] Sending to chat:', TELEGRAM_CHAT_ID);
         fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'Markdown' }),
-        }).catch(() => {});
+        })
+          .then(r => r.json())
+          .then(r => console.log('[Telegram] Response:', JSON.stringify(r)))
+          .catch(e => console.error('[Telegram] Error:', e));
+      } else {
+        console.warn('[Telegram] Missing token or chat_id', { hasToken: !!TELEGRAM_BOT_TOKEN, hasChatId: !!TELEGRAM_CHAT_ID });
       }
 
       return NextResponse.json(data);

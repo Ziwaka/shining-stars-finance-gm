@@ -12,7 +12,7 @@ const COLORS = [
 ];
 
 const renderPieLabel = ({ cx, cy, midAngle, outerRadius, name, percent }: any) => {
-  if (percent < 0.05) return null;
+  if (percent < 0.02) return null;
   const RAD = Math.PI / 180;
   const r = outerRadius + 22;
   const x = cx + r * Math.cos(-midAngle * RAD);

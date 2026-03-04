@@ -560,7 +560,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                   <label className="cursor-pointer flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors">
                     <Camera size={24}/>
                     <span className="text-[9px] font-black uppercase">TAP TO ADD PHOTO</span>
-                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload}/>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload}/>
                   </label>
                 )}
               </div>
@@ -571,6 +571,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             </button>
           </div>
         </div>
+      </div>
 
       <div className="lg:col-span-4 flex flex-col bg-slate-50 border-l border-slate-200 font-black">
         <div className="bg-slate-200 p-5 text-slate-950 flex justify-between items-center font-black border-b border-slate-300">

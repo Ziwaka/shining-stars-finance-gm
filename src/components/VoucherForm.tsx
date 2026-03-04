@@ -733,7 +733,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </div>
       )}
 
+      </div>
     </div>
-  </div>
   );
 }

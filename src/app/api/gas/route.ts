@@ -74,20 +74,12 @@ async function sendTelegramSummary(newItems: any[], allVouchers: any[]) {
     return;
   }
 
-  // ✅ GAS မှာ Cash In → cost_total=0, income column မှာ amount ထားတာ
   const getType = (v: any) => (v.type || v.Type || 'Cash Out').toString().trim();
-  const getAmt  = (v: any) => {
-    const isCashIn = getType(v) === 'Cash In';
-    if (isCashIn) {
-      return Number(v.income || v.Income || v.cost_total || v['cost_(total)'] || 0);
-    }
-    return Number(v.cost_total || v['cost_(total)'] || 0);
-  };
 
-  // ✅ Balance = Sheet ထဲက historical + ခုသွင်းတဲ့ batch
+  // ✅ Income column = Cash In amount, cost_total column = Cash Out amount
   const combined = [...allVouchers, ...newItems];
-  const totalIn  = combined.filter(v => getType(v) === 'Cash In').reduce((s, v) => s + getAmt(v), 0);
-  const totalOut = combined.filter(v => getType(v) !== 'Cash In').reduce((s, v) => s + getAmt(v), 0);
+  const totalIn  = combined.reduce((s, v) => s + Number(v.income || v.Income || 0), 0);
+  const totalOut = combined.reduce((s, v) => s + Number(v.cost_total || v['cost_(total)'] || 0), 0);
   const balance  = totalIn - totalOut;
 
   const date     = newItems[0]?.date || new Date().toISOString().split('T')[0];
@@ -100,15 +92,23 @@ async function sendTelegramSummary(newItems: any[], allVouchers: any[]) {
   const itemLines = newItems.map((i, idx) => {
     const desc  = i.item_description || i.item || '-';
     const qty   = Number(i.count || 1);
-    const rate  = Number(i.cost_piece || getAmt(i));
-    const total = Number(getAmt(i));
-    const arrow = getType(i) === 'Cash In' ? '🟢' : '🔴';
+    const rate  = Number(i.cost_piece || 0);
+    const isCashIn = getType(i) === 'Cash In';
+    const total = isCashIn
+      ? Number(i.income || i.Income || 0)
+      : Number(i.cost_total || i['cost_(total)'] || 0);
+    const arrow = isCashIn ? '🟢' : '🔴';
     return `${arrow} ${idx + 1}. ${desc}\n` +
            `   ${qty} x ${rate.toLocaleString()} = *${total.toLocaleString()} MMK*` +
            (i.note ? `\n   📝 ${i.note}` : '');
   }).join('\n');
 
-  const grandTotal = newItems.reduce((s, i) => s + getAmt(i), 0);
+  const grandTotal = newItems.reduce((s, i) => {
+    const isCashIn = getType(i) === 'Cash In';
+    return s + (isCashIn
+      ? Number(i.income || i.Income || 0)
+      : Number(i.cost_total || i['cost_(total)'] || 0));
+  }, 0);
 
   const msg =
     `🏫 *SHINING STARS — FINANCE*\n` +

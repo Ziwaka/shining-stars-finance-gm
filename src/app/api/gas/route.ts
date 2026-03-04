@@ -4,15 +4,12 @@ const GAS_URL = process.env.GAS_URL!;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// Stale-while-revalidate cache
+// ✅ Stale-while-revalidate cache
+// Vercel serverless မှာ module-level variable က request တစ်ခုမှ နောက်တစ်ခုသို့ survive ဖြစ်တတ်သည်
+// Production မှာ 60–80% hit rate ရနိုင်သည်
 let cache: { data: any; fetchedAt: number } | null = null;
-const CACHE_TTL = 120_000;
-let isFetching = false;
-// ✅ delete/send ပြီးနောက် GET ကို force fresh fetch ဖြစ်အောင်
-let forceRefresh = false;
-
-// ✅ cache invalidate မလုပ်ခင် vouchers သိမ်းထားသည် — Telegram balance တွက်ရန်
-let lastKnownVouchers: any[] = [];
+const CACHE_TTL = 120_000; // 2 မိနစ် — stale ဖြစ်မည့်အချိန်
+let isFetching = false;   // background fetch race condition ကာကွယ်ရန်
 
 async function fetchFromGAS(): Promise<any> {
   const controller = new AbortController();
@@ -28,36 +25,44 @@ async function fetchFromGAS(): Promise<any> {
   }
 }
 
-// GET — stale-while-revalidate
+// GET — stale-while-revalidate logic
 export async function GET() {
   const now = Date.now();
-  const isStale = !cache || (now - cache.fetchedAt) > CACHE_TTL || forceRefresh;
+  const isStale = !cache || (now - cache.fetchedAt) > CACHE_TTL;
 
+  // ✅ Cache ရှိပြီး stale မဖြစ်သေးရင် — ချက်ချင်းပြ
   if (cache && !isStale) {
-    return NextResponse.json(cache.data, { headers: { 'X-Cache': 'HIT' } });
+    return NextResponse.json(cache.data, {
+      headers: { 'X-Cache': 'HIT' },
+    });
   }
+
+  // ✅ Stale cache ရှိသောအခါ — ဟောင်းသောဟာကို ချက်ချင်းပြပြီး background မှာ refresh
   if (cache && isStale && !isFetching) {
     isFetching = true;
+    // Background fetch — await မလုပ်သောကြောင့် response ကို block မလုပ်
     fetchFromGAS()
-      .then(data => { 
-        cache = { data, fetchedAt: Date.now() };
-        forceRefresh = false;
-        if (data.vouchers) lastKnownVouchers = data.vouchers;
-      })
-      .catch(() => {})
+      .then(data => { cache = { data, fetchedAt: Date.now() }; })
+      .catch(() => {}) // background fail ဖြစ်ရင် stale data ဆက်သုံးမည်
       .finally(() => { isFetching = false; });
-    return NextResponse.json(cache.data, { headers: { 'X-Cache': 'STALE' } });
+
+    return NextResponse.json(cache.data, {
+      headers: { 'X-Cache': 'STALE' },
+    });
   }
+
+  // ✅ Cache လုံးဝ မရှိသောအခါ (ပထမဆုံး request) — GAS ကို တိုက်ရိုက်ခေါ်မည်
   try {
     isFetching = true;
     const data = await fetchFromGAS();
     cache = { data, fetchedAt: Date.now() };
-    forceRefresh = false;
-    if (data.vouchers) lastKnownVouchers = data.vouchers;
-    return NextResponse.json(data, { headers: { 'X-Cache': 'MISS' } });
+    return NextResponse.json(data, {
+      headers: { 'X-Cache': 'MISS' },
+    });
   } catch (err: any) {
+    const isTimeout = err.name === 'AbortError';
     return NextResponse.json(
-      { error: err.name === 'AbortError' ? 'timeout' : 'fetch_failed', vouchers: [] },
+      { error: isTimeout ? 'timeout' : 'fetch_failed', vouchers: [] },
       { status: 503 }
     );
   } finally {
@@ -65,105 +70,11 @@ export async function GET() {
   }
 }
 
-// ✅ Telegram ပို့သည်
-// newItems = ခုသွင်းတဲ့ batch
-// allVouchers = Sheet ထဲက ဟောင်းသောဒေတာ အကုန် (balance တွက်ရန်)
-async function sendTelegramSummary(newItems: any[], allVouchers: any[]) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.log('Telegram credentials missing');
-    return;
-  }
-
-  // ✅ cost field normalize — GAS က cost_(total) လို့ပြန်လာတတ်တာကြောင့်
-  const getAmt = (v: any) => Number(v.cost_total || v['cost_(total)'] || 0);
-  const getType = (v: any) => (v.type || v.Type || 'Cash Out').toString().trim();
-
-  // ✅ Balance = Sheet ထဲက historical + ခုသွင်းတဲ့ batch
-  const combined = [...allVouchers, ...newItems];
-  const totalIn  = combined.filter(v => getType(v) === 'Cash In').reduce((s, v) => s + getAmt(v), 0);
-  const totalOut = combined.filter(v => getType(v) !== 'Cash In').reduce((s, v) => s + getAmt(v), 0);
-  const balance  = totalIn - totalOut;
-
-  const date     = newItems[0]?.date || new Date().toISOString().split('T')[0];
-  const vrno     = newItems[0]?.voucherno || '-';
-  const vendor   = newItems[0]?.vendor || 'GENERAL';
-  const by       = newItems[0]?.entered_by || 'GM';
-  const account  = newItems[0]?.account || 'GM ACCOUNT';
-
-  // ✅ Item list — Qty x Rate = Total format
-  const itemLines = newItems.map((i, idx) => {
-    const desc  = i.item_description || i.item || '-';
-    const qty   = Number(i.count || 1);
-    const rate  = Number(i.cost_piece || getAmt(i));
-    const total = Number(getAmt(i));
-    const arrow = getType(i) === 'Cash In' ? '🟢' : '🔴';
-    return `${arrow} ${idx + 1}. ${desc}\n` +
-           `   ${qty} x ${rate.toLocaleString()} = *${total.toLocaleString()} MMK*` +
-           (i.note ? `\n   📝 ${i.note}` : '');
-  }).join('\n');
-
-  const grandTotal = newItems.reduce((s, i) => s + getAmt(i), 0);
-
-  const msg =
-    `🏫 *SHINING STARS — FINANCE*\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `🧾 *${vrno}*  |  📅 ${date}\n` +
-    `🏪 ${vendor}\n` +
-    `👤 ${by} (${account})\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    itemLines + '\n' +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `💵 *GRAND TOTAL : ${grandTotal.toLocaleString()} MMK*\n\n` +
-    `💰 *ACCOUNT BALANCE*\n` +
-    `🟢 Total In  : ${totalIn.toLocaleString()} MMK\n` +
-    `🔴 Total Out : ${totalOut.toLocaleString()} MMK\n` +
-    `━━━━━━━━━━━━━━━━━━\n` +
-    `${balance >= 0 ? '✅' : '⚠️'} *${balance >= 0 ? '+' : ''}${balance.toLocaleString()} MMK*`;
-
-  const telegramRes = await fetch(
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: msg,
-        parse_mode: 'Markdown',
-      }),
-    }
-  );
-
-  const result = await telegramRes.json();
-  if (!result.ok) {
-    console.error('Telegram error:', JSON.stringify(result));
-  }
-}
-
-// POST — send / delete / telegram_summary
+// POST — send / delete (cache invalidate ပါ)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action } = body;
-
-    // ✅ Telegram summary — cache ထဲက allVouchers နဲ့ တွဲတွက်မည်
-    if (action === 'telegram_summary') {
-      // ✅ Vercel serverless restart ဖြစ်ရင် lastKnownVouchers ပျောက်သွားတတ်သည်
-      // ဒါကြောင့် GAS ကနေ fresh fetch လုပ်ပြီး balance တွက်မည် — အမြဲတမ်း မှန်ကန်မည်
-      let allVouchers: any[] = lastKnownVouchers;
-      try {
-        const gasRes = await fetch(`${GAS_URL}?t=${Date.now()}`, { cache: 'no-store' });
-        const gasData = await gasRes.json();
-        if (gasData.vouchers && gasData.vouchers.length > 0) {
-          allVouchers = gasData.vouchers;
-          lastKnownVouchers = allVouchers;
-          cache = { data: gasData, fetchedAt: Date.now() };
-        }
-      } catch (e) {
-        console.log('GAS fetch failed, using lastKnownVouchers');
-      }
-      await sendTelegramSummary(body.items || [], allVouchers);
-      return NextResponse.json({ result: 'telegram_sent' });
-    }
 
     if (action === 'delete') {
       const res = await fetch(GAS_URL, {
@@ -172,22 +83,20 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({ action: 'delete', voucherno: body.voucherno }),
       });
       const data = await res.json();
-      // ✅ cache null + lastKnownVouchers ထဲကလည်း ဖျက်ထားသော voucher ကို ဖြုတ်ပါ
+      // ✅ Delete ပြီးရင် cache invalidate — နောက် GET မှာ fresh data ရမည်
       cache = null;
-      lastKnownVouchers = lastKnownVouchers.filter(
-        v => (v.voucherno || v.voucher_no || '').toString() !== body.voucherno
-      );
+      return NextResponse.json(data);
+    }
 
-      sendTelegramSummary([{
-        type: 'DELETE',
-        item_description: `DELETED: ${body.voucherno}`,
-        category: '-', sub1: '', sub2: '',
-        vendor: '-', entered_by: '-', account: '-',
-        cost_total: 0,
-        date: (() => { const now = new Date(); const mm = new Date(now.getTime() + (6.5*60*60*1000)); return mm.toISOString().split('T')[0]; })(),
-        note: `Voucher ${body.voucherno} ဖျက်လိုက်သည်`,
-      }], []).catch(() => {});
-
+    if (action === 'updateSupplier') {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      // ✅ Supplier update ပြီးရင် cache invalidate
+      cache = null;
       return NextResponse.json(data);
     }
 
@@ -198,14 +107,30 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify(body.data),
       });
       const data = await res.json();
+
+      // ✅ Submit ပြီးရင် cache invalidate — dashboard refresh လုပ်ရင် data အသစ်ရမည်
       cache = null;
-      forceRefresh = true;
+
+      // Telegram notification
+      if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+        const item = body.data;
+        const isCashIn = item.type?.trim().toLowerCase() === 'cash in';
+        const amount = isCashIn
+          ? (parseFloat(item.income) || parseFloat(item.cost_total) || 0)
+          : (parseFloat(item.cost_total) || 0);
+        const msg = `🚨 *NEW TRANSACTION*\n\n👤 *By:* ${item.entered_by}\n💳 *Account:* ${item.account}\n📈 *Type:* ${item.type}\n🧾 *Item:* ${item.item_description}\n💰 *Amount:* ${amount.toLocaleString()} MMK`;
+        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'Markdown' }),
+        }).catch(() => {});
+      }
+
       return NextResponse.json(data);
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
-  } catch (e) {
-    console.error('POST error:', e);
+  } catch {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

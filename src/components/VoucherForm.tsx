@@ -25,11 +25,11 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [supplierDropdown, setSupplierDropdown] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [showNewSupplierForm, setShowNewSupplierForm] = useState(false);
-  const [newSupplier, setNewSupplier] = useState({ name: '', phone: '', address: '', service: '' });
+  const [newSupplier, setNewSupplier] = useState({ name: '', phone1: '', phone2: '', phone3: '', address: '', service: '' });
   const supplierRef = useRef<HTMLDivElement>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ phone: '', address: '', service: '' });
+  const [editForm, setEditForm] = useState({ phone1: '', phone2: '', phone3: '', address: '', service: '' });
   const [editServices, setEditServices] = useState<string[]>([]);
   const [newServiceInput, setNewServiceInput] = useState('');
   const [editSaving, setEditSaving] = useState(false);
@@ -115,7 +115,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const openEditModal = (supplier: any) => {
     const services = supplier.service ? supplier.service.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
     setEditingSupplier(supplier);
-    setEditForm({ phone: supplier.phone || '', address: supplier.address || '', service: supplier.service || '' });
+    setEditForm({ phone1: supplier.phone1 || supplier.phone || '', phone2: supplier.phone2 || '', phone3: supplier.phone3 || '', address: supplier.address || '', service: supplier.service || '' });
     setEditServices(services);
     setNewServiceInput('');
     setShowEditModal(true);
@@ -124,7 +124,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const saveEditedSupplier = async () => {
     if (!editingSupplier) return;
     setEditSaving(true);
-    const updated = { ...editingSupplier, ...editForm, service: editServices.join(', ') };
+    const updated = { ...editingSupplier, phone1: editForm.phone1, phone2: editForm.phone2, phone3: editForm.phone3, address: editForm.address, service: editServices.join(', ') };
     try {
       await fetch('/api/gas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'updateSupplier', supplier: updated }) });
       setConfig((prev: any) => ({ ...prev, suppliers: prev.suppliers.map((s: any) => s.name === editingSupplier.name ? updated : s) }));
@@ -157,7 +157,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const newItem = {
       date, entered_by: enteredBy, account, vendor, type,
       voucherno: vrNo,
-      vendor_phone: selectedSupplier?.phone || '',
+      vendor_phone: selectedSupplier?.phone1 || selectedSupplier?.phone || '',
       vendor_address: selectedSupplier?.address || '',
       vendor_service: selectedSupplier?.service || '',
       category, sub1, sub2, sub3, sub4, sub5,
@@ -188,7 +188,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       setItemList([]);
       setVoucherno('');
       onRefresh();
-      setTimeout(() => setSubmitStatus('idle'), 3000);
+      // ✅ success မှာ ရပ်ထား — NEW VOUCHER နှိပ်မှ resetForm သွားမည်
     } catch {
       setSubmitStatus('error');
       setTimeout(() => setSubmitStatus('idle'), 3000);
@@ -273,7 +273,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                   </div>
                 </div>
                 {[
-                  { icon: <Phone size={11}/>, value: selectedSupplier.phone, placeholder: 'PHONE' },
+                  { icon: <Phone size={11}/>, value: [selectedSupplier.phone1||selectedSupplier.phone, selectedSupplier.phone2, selectedSupplier.phone3].filter(Boolean).join(' / '), placeholder: 'PHONE' },
                   { icon: <MapPin size={11}/>, value: selectedSupplier.address, placeholder: 'ADDRESS' },
                   { icon: <Briefcase size={11}/>, value: selectedSupplier.service, placeholder: 'SERVICE' },
                 ].map(({ icon, value, placeholder }, idx) => (
@@ -288,14 +288,28 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             {showNewSupplierForm && (
               <div className="bg-white border border-slate-300 rounded-xl p-4 space-y-2 shadow-sm">
                 <p className="text-[10px] font-black text-slate-950 tracking-widest">NEW SUPPLIER</p>
-                {[{ key: 'name', label: 'NAME', icon: <User size={10}/> }, { key: 'phone', label: 'PHONE', icon: <Phone size={10}/> }, { key: 'address', label: 'ADDRESS', icon: <MapPin size={10}/> }, { key: 'service', label: 'SERVICE', icon: <Briefcase size={10}/> }].map(({ key, label, icon }) => (
+                {[{ key: 'name', label: 'NAME', icon: <User size={10}/> }, { key: 'phone1', label: 'PHONE 1', icon: <Phone size={10}/> }, { key: 'phone2', label: 'PHONE 2', icon: <Phone size={10}/> }, { key: 'phone3', label: 'PHONE 3', icon: <Phone size={10}/> }, { key: 'address', label: 'ADDRESS', icon: <MapPin size={10}/> }, { key: 'service', label: 'SERVICE / PRODUCT', icon: <Briefcase size={10}/> }].map(({ key, label, icon }) => (
                   <div key={key} className="flex items-center gap-2">
                     <span className="text-slate-400">{icon}</span>
                     <input className="flex-1 bg-slate-50 border border-slate-200 p-2 rounded-lg text-[11px] outline-none font-black text-slate-950" placeholder={label} value={(newSupplier as any)[key]} onChange={e => setNewSupplier({ ...newSupplier, [key]: e.target.value })}/>
                   </div>
                 ))}
                 <div className="flex gap-2 pt-1">
-                  <button onClick={() => { if (!newSupplier.name) return; setVendor(newSupplier.name); setSupplierSearch(newSupplier.name); setSelectedSupplier(newSupplier); setConfig((prev: any) => ({ ...prev, suppliers: [...prev.suppliers, { ...newSupplier }] })); setShowNewSupplierForm(false); setNewSupplier({ name: '', phone: '', address: '', service: '' }); }} className="flex-1 bg-slate-950 text-white text-[10px] py-2 rounded-lg font-black">SAVE</button>
+                  <button onClick={() => {
+                    if (!newSupplier.name) return;
+                    // ✅ တူတဲ့ Supplier ရှိရင် service ပေါင်း၊ မရှိရင် အသစ်ထည့်
+                    const existing = config.suppliers.find((s: any) => s.name.toLowerCase() === newSupplier.name.toLowerCase());
+                    if (existing) {
+                      const mergedServices = [existing.service, newSupplier.service].filter(Boolean).join(', ');
+                      const merged = { ...existing, ...newSupplier, service: mergedServices };
+                      setVendor(merged.name); setSupplierSearch(merged.name); setSelectedSupplier(merged);
+                      setConfig((prev: any) => ({ ...prev, suppliers: prev.suppliers.map((s: any) => s.name.toLowerCase() === merged.name.toLowerCase() ? merged : s) }));
+                    } else {
+                      setVendor(newSupplier.name); setSupplierSearch(newSupplier.name); setSelectedSupplier(newSupplier);
+                      setConfig((prev: any) => ({ ...prev, suppliers: [...prev.suppliers, { ...newSupplier }] }));
+                    }
+                    setShowNewSupplierForm(false); setNewSupplier({ name: '', phone1: '', phone2: '', phone3: '', address: '', service: '' });
+                  }} className="flex-1 bg-slate-950 text-white text-[10px] py-2 rounded-lg font-black">SAVE</button>
                   <button onClick={() => setShowNewSupplierForm(false)} className="flex-1 bg-slate-100 text-slate-600 text-[10px] py-2 rounded-lg font-black">CANCEL</button>
                 </div>
               </div>
@@ -508,8 +522,16 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             </div>
             <div className="p-6 space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><Phone size={10}/> PHONE</label>
-                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 " value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} placeholder="09..."/>
+                <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><Phone size={10}/> PHONE 1</label>
+                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 " value={editForm.phone1} onChange={e => setEditForm({ ...editForm, phone1: e.target.value })} placeholder="09..."/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><Phone size={10}/> PHONE 2</label>
+                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 " value={editForm.phone2} onChange={e => setEditForm({ ...editForm, phone2: e.target.value })} placeholder="09..."/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><Phone size={10}/> PHONE 3</label>
+                <input className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:border-slate-500 font-black text-slate-950 " value={editForm.phone3} onChange={e => setEditForm({ ...editForm, phone3: e.target.value })} placeholder="09..."/>
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1"><MapPin size={10}/> ADDRESS</label>

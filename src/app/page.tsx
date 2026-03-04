@@ -127,6 +127,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-100 font-black uppercase text-slate-950">
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <div className="max-w-[1400px] mx-auto p-6 lg:p-10 space-y-12">
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b-4 border-slate-200 pb-10 font-black print:hidden">
@@ -144,18 +145,29 @@ export default function Home() {
           </div>
 
           <div className="flex gap-4 items-center font-black">
-            {/* ✅ Data loading indicator */}
-            {dataLoading ? (
-              <div className="hidden lg:flex bg-white px-6 py-4 rounded-3xl border border-slate-200 shadow-sm items-center gap-3 font-black">
-                <RefreshCcw size={14} className="animate-spin text-slate-500" />
-                <span className="text-[10px] font-black text-slate-500">SYNCING...</span>
+            {/* Sync button with progress */}
+            <button
+              onClick={fetchVouchers}
+              disabled={dataLoading}
+              className="flex bg-white px-5 py-3.5 rounded-3xl border border-slate-200 shadow-sm items-center gap-3 font-black hover:bg-slate-50 transition-all disabled:opacity-60"
+            >
+              <RefreshCcw
+                size={14}
+                className={dataLoading ? 'text-slate-500' : 'text-emerald-600'}
+                style={dataLoading ? { animation: 'spin 1s linear infinite' } : {}}
+              />
+              <div className="flex flex-col items-start gap-0.5">
+                <span className="text-[10px] font-black text-slate-950">
+                  {dataLoading ? 'SYNCING...' : 'LIVE SYNC'}
+                </span>
+                {dataLoading && (
+                  <div className="w-16 h-1 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-slate-950 rounded-full animate-pulse" style={{width: '60%'}}></div>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="hidden lg:flex bg-white px-6 py-4 rounded-3xl border border-slate-200 shadow-sm items-center gap-3 font-black">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
-                <span className="text-[10px] font-black text-slate-950">LIVE SYNC</span>
-              </div>
-            )}
+              {!dataLoading && <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"/>}
+            </button>
             <Link href="/entry" className="bg-slate-950 text-white px-8 py-4 rounded-3xl shadow-lg hover:bg-slate-800 transition-all flex items-center gap-2 font-black text-sm">
               <Plus size={18} strokeWidth={3} /> ADD NEW VOUCHER
             </Link>
@@ -164,10 +176,16 @@ export default function Home() {
 
         <section className="space-y-6 font-black">
           {dataLoading && vouchers.length === 0 ? (
-            // ✅ Dashboard loading skeleton
             <div className="flex flex-col items-center justify-center py-40 gap-6">
-              <RefreshCcw className="animate-spin text-slate-400" size={40} />
-              <p className="text-[10px] tracking-[0.3em] text-slate-400 font-black">LOADING FINANCIAL DATA...</p>
+              <div style={{animation: 'spin 1s linear infinite', display:'inline-block'}}>
+                <RefreshCcw className="text-slate-400" size={40} />
+              </div>
+              <div className="space-y-3 w-48 text-center">
+                <p className="text-[10px] tracking-[0.3em] text-slate-400 font-black">LOADING FINANCIAL DATA...</p>
+                <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-slate-400 rounded-full animate-pulse" style={{width:'70%'}}></div>
+                </div>
+              </div>
             </div>
           ) : (
             <FinancialDashboard vouchers={vouchers} onRefresh={fetchVouchers} />

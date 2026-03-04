@@ -26,7 +26,11 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
         ? rawDate.toISOString().split('T')[0]
         : rawDate.toString().replace(/T.*$/, '').substring(0, 10);
       const cleanDate = rawStr;
-      const rawAmount = v['cost_(total)'] || v.cost_total || v.Cost_Total || 0;
+      // ✅ GAS မှာ Cash In ဆိုရင် cost_total=0, income column မှာ amount ထားတာ
+      const rawType = (v.type || v.Type || '').toString().trim();
+      const rawAmount = rawType.toLowerCase() === 'cash in'
+        ? (v.income || v.Income || v['cost_(total)'] || v.cost_total || 0)
+        : (v['cost_(total)'] || v.cost_total || v.Cost_Total || 0);
       const itemName = v.item_description || v['item_description'] || v.item || v.Item || '';
 
       return {

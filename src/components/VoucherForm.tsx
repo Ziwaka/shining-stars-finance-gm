@@ -104,12 +104,15 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const sub4Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3).map((row: any) => String(row.Sub_4 || row.sub4 || '')))).filter(Boolean), [sub3, config.categoryList, category, sub1, sub2]);
   const sub5Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3 && String(row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean), [sub4, config.categoryList, category, sub1, sub2, sub3]);
 
-  // ✅ Bug Fix: ID ကို generate ပြီးမှ return ပြန်သည် — item ထဲ မဝင်ခင် သတ်မှတ်နိုင်ရန်
+  // ✅ Vr ID — same vendor+date+category = same ID (batch ထဲ items အားလုံး ID တူရမည်)
   const generateVrID = (cat: string, currentBatch: any[]): string => {
     const prefix = type === 'Cash In' ? 'INC' : (config.prefixes[cat] || "EXP");
+    // ✅ Batch ထဲ ရှိပြီးသား ID ကို ပြန်သုံး (same vendor+date)
+    if (currentBatch.length > 0 && voucherno) {
+      return voucherno;
+    }
     const lastNum = config.lastSerials[prefix] || 0;
-    const inBatchCount = currentBatch.filter(i => String(i.voucherno).startsWith(prefix)).length;
-    const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
+    const nextNum = (lastNum + 1).toString().padStart(3, '0');
     const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
     const newId = `${prefix}-${month}-${nextNum}`;
     setVoucherno(newId);
@@ -185,7 +188,9 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setCategory(''); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
     setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '' });
     setItemSearch(''); setImage(''); setVoucherno('');
+    setItemList([]);
     setSubmitStatus('idle');
+    setType('Cash Out');
   };
 
   const addItem = () => {
@@ -237,7 +242,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       setItemList([]);
       setVoucherno('');
       onRefresh();
-      setTimeout(() => setSubmitStatus('idle'), 3000);
+      // ✅ idle ပြန်မသွားစေနဲ့ — NEW VOUCHER button နှိပ်မှ reset ဖြစ်ရမည်
     } catch (err) {
       console.error('Submit error:', err);
       setSubmitStatus('error');

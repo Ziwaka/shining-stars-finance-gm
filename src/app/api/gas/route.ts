@@ -77,55 +77,60 @@ export async function POST(req: NextRequest) {
       }
       cache = null;
 
-      // Telegram ပို့
-      if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID && items.length > 0) {
-        const first = items[0];
-        const isCashIn = first.type?.trim().toLowerCase() === 'cash in';
-        const emoji = isCashIn ? '📥' : '📤';
-        const grandTotal = items.reduce((s: number, i: any) => s + (parseFloat(i.cost_total) || 0), 0);
+        let telegramResult = 'skipped';
+        if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID && items.length > 0) {
+          const first = items[0];
+          const isCashIn = first.type?.trim().toLowerCase() === 'cash in';
+          const emoji = isCashIn ? '📥' : '📤';
+          const grandTotal = items.reduce((s: number, i: any) => s + (parseFloat(i.cost_total) || 0), 0);
 
-        const itemLines = items.map((i: any, idx: number) => {
-          const subs = [i.sub1, i.sub2, i.sub3, i.sub4, i.sub5].filter(Boolean).join(' › ');
-          const cat = subs ? `${i.category} › ${subs}` : (i.category || '—');
-          return `${idx + 1}. ${i.item_description} — ${parseFloat(i.cost_total).toLocaleString()} MMK\n    📂 ${cat}`;
-        }).join('\n');
+          const itemLines = items.map((i: any, idx: number) => {
+            const subs = [i.sub1, i.sub2, i.sub3, i.sub4, i.sub5].filter(Boolean).join(' › ');
+            const cat = subs ? `${i.category} › ${subs}` : (i.category || '—');
+            return `${idx + 1}. ${i.item_description} — ${parseFloat(i.cost_total).toLocaleString()} MMK\n    📂 ${cat}`;
+          }).join('\n');
 
-        // Balance တွက်
-        let totalIn = 0, totalOut = 0;
-        try {
-          const gasData = await fetchFromGAS();
-          (gasData.vouchers || []).forEach((v: any) => {
-            if ((v.type || '').trim().toLowerCase() === 'cash in')
-              totalIn += Math.round(Number(v.income || v['cost_(total)'] || v.cost_total || 0));
-            else
-              totalOut += Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
-          });
-        } catch { /* silent */ }
+          let totalIn = 0, totalOut = 0;
+          try {
+            const gasData = await fetchFromGAS();
+            (gasData.vouchers || []).forEach((v: any) => {
+              if ((v.type || '').trim().toLowerCase() === 'cash in')
+                totalIn += Math.round(Number(v.income || v['cost_(total)'] || v.cost_total || 0));
+              else
+                totalOut += Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
+            });
+          } catch { /* silent */ }
 
-        const balance = totalIn - totalOut;
-        const msg = [
-          `${emoji} *${first.type?.toUpperCase()} — ${first.voucherno || ''}*`,
-          `👤 ${first.entered_by}  |  💳 ${first.account}  |  📅 ${first.date}`,
-          `🏷️ ${first.vendor || '—'}`,
-          ``,
-          itemLines,
-          ``,
-          `💵 *Total: ${grandTotal.toLocaleString()} MMK*`,
-          `${'─'.repeat(24)}`,
-          `📈 In:  ${totalIn.toLocaleString()} MMK`,
-          `📉 Out: ${totalOut.toLocaleString()} MMK`,
-          `${balance >= 0 ? '🟢' : '🔴'} Bal: ${balance.toLocaleString()} MMK`,
-          balance < 0 ? `⚠️ *BALANCE NEGATIVE!*` : '',
-        ].filter(Boolean).join('\n');
+          const balance = totalIn - totalOut;
+          const msg = [
+            `${emoji} *${first.type?.toUpperCase()} — ${first.voucherno || ''}*`,
+            `👤 ${first.entered_by}  |  💳 ${first.account}  |  📅 ${first.date}`,
+            `🏷️ ${first.vendor || '—'}`,
+            ``,
+            itemLines,
+            ``,
+            `💵 *Total: ${grandTotal.toLocaleString()} MMK*`,
+            `${'─'.repeat(24)}`,
+            `📈 In:  ${totalIn.toLocaleString()} MMK`,
+            `📉 Out: ${totalOut.toLocaleString()} MMK`,
+            `${balance >= 0 ? '🟢' : '🔴'} Bal: ${balance.toLocaleString()} MMK`,
+            balance < 0 ? `⚠️ *BALANCE NEGATIVE!*` : '',
+          ].filter(Boolean).join('\n');
 
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'Markdown' }),
-        });
-      }
+          try {
+            const tRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'Markdown' }),
+            });
+            const tData = await tRes.json();
+            telegramResult = tData.ok ? 'sent' : `failed: ${JSON.stringify(tData)}`;
+          } catch (e: any) {
+            telegramResult = `error: ${e.message}`;
+          }
+        }
 
-      return NextResponse.json({ result: 'ok' });
+        return NextResponse.json({ result: 'ok', telegram: telegramResult });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

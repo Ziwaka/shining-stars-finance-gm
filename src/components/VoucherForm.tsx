@@ -179,6 +179,15 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     }
   };
 
+  // ✅ Form အကုန် reset — New Voucher အတွက်
+  const resetForm = () => {
+    setVendor(''); setSupplierSearch(''); setSelectedSupplier(null);
+    setCategory(''); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
+    setCurrentItem({ item_description: '', count: '', cost_piece: '', note: '' });
+    setItemSearch(''); setImage(''); setVoucherno('');
+    setSubmitStatus('idle');
+  };
+
   const addItem = () => {
     const countNum = parseFloat(currentItem.count);
     const costNum = parseInt(currentItem.cost_piece);
@@ -414,20 +423,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-black">
           <div className="space-y-4 font-black">
-             <div className="relative h-44 bg-white rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden font-black">
-               {image ? (
-                 <>
-                   <img src={image} className="w-full h-full object-cover font-black"/>
-                   <button onClick={() => setImage('')} className="absolute top-2 right-2 bg-rose-100 text-rose-600 border border-rose-200 p-2 rounded-full font-black shadow-sm"><Trash2 size={14}/></button>
-                 </>
-               ) : (
-                 <label className="cursor-pointer flex flex-col items-center font-black">
-                   <Camera size={32} className="text-slate-400 mb-2 font-black"/>
-                   <span className="text-[10px] text-slate-500 font-black">VR PHOTO</span>
-                   <input type="file" accept="image/*" className="hidden font-black" onChange={handleImageUpload} />
-                 </label>
-               )}
-             </div>
              
              <div className="space-y-1 font-black">
                <label className="text-[10px] text-slate-500 uppercase font-black">CATEGORY</label>
@@ -527,6 +522,26 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               <textarea className="w-full p-4 bg-white border border-slate-300 rounded-xl text-[10px] outline-none focus:border-slate-500 uppercase h-16 resize-none font-black text-slate-950" value={currentItem.note} onChange={e => setCurrentItem({...currentItem, note: e.target.value})} />
             </div>
             
+            {/* ✅ Per-item ဓာတ်ပုံ */}
+            <div className="space-y-1 font-black">
+              <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1 font-black"><Camera size={12}/> ITEM PHOTO (optional)</label>
+              <div className="relative h-28 bg-white rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
+                {image ? (
+                  <>
+                    <img src={image} className="w-full h-full object-cover"/>
+                    <button onClick={() => setImage('')} className="absolute top-2 right-2 bg-rose-100 text-rose-600 border border-rose-200 p-1.5 rounded-full shadow-sm"><Trash2 size={12}/></button>
+                    <span className="absolute bottom-2 left-2 bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full border border-emerald-200">📷 PHOTO ATTACHED</span>
+                  </>
+                ) : (
+                  <label className="cursor-pointer flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors">
+                    <Camera size={24}/>
+                    <span className="text-[9px] font-black uppercase">TAP TO ADD PHOTO</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload}/>
+                  </label>
+                )}
+              </div>
+            </div>
+
             <button onClick={addItem} className="w-full bg-slate-200 text-slate-950 py-5 rounded-[1.5rem] text-sm hover:bg-slate-300 transition-all flex items-center justify-center uppercase font-black border border-slate-300 shadow-sm">
               <Plus className="mr-2 font-black" size={20} strokeWidth={4}/> ADD TO BATCH
             </button>
@@ -550,6 +565,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                 <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="text-rose-500 p-1 font-black"><Trash2 size={14} className="font-black"/></button>
               </div>
               {i.note && <p className="text-[9px] text-slate-500 mt-2 font-black">NOTE: {i.note}</p>}
+              {i.image_data && <p className="text-[9px] text-emerald-600 font-black mt-1">📷 PHOTO ATTACHED</p>}
               <div className="flex justify-between items-end mt-4 font-black">
                 <p className="text-[9px] text-slate-500 font-black">{i.count} X {i.cost_piece.toLocaleString()} MMK</p>
                 <p className="text-sm font-black text-slate-950">{(i.cost_total).toLocaleString()}</p>
@@ -562,12 +578,17 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             <span className="text-slate-600 text-[10px] tracking-widest font-black">TOTAL</span>
             <span className="text-slate-950 text-4xl font-black">{itemList.reduce((s,x)=>s+x.cost_total,0).toLocaleString()}</span>
           </div>
-          <button onClick={handleFinalSubmit} disabled={submitStatus === 'processing'} className={`w-full py-5 rounded-2xl text-xs transition-all flex items-center justify-center font-black ${submitStatus === 'idle' ? 'bg-slate-950 text-white shadow-md hover:bg-slate-800' : submitStatus === 'processing' ? 'bg-slate-300 text-slate-950' : submitStatus === 'success' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-rose-100 text-rose-900 border border-rose-300'}`}>
+          <button onClick={handleFinalSubmit} disabled={submitStatus === 'processing' || submitStatus === 'success'} className={`w-full py-5 rounded-2xl text-xs transition-all flex items-center justify-center font-black ${submitStatus === 'idle' ? 'bg-slate-950 text-white shadow-md hover:bg-slate-800' : submitStatus === 'processing' ? 'bg-slate-300 text-slate-950' : submitStatus === 'success' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-rose-100 text-rose-900 border border-rose-300'}`}>
             {submitStatus === 'idle' && <><Save className="mr-2 font-black" size={18} strokeWidth={3}/> POST TO CLOUD</>}
             {submitStatus === 'processing' && <><RefreshCcw className="mr-2 animate-spin font-black" size={18} strokeWidth={3}/> PROCESSING...</>}
             {submitStatus === 'success' && <><CheckCircle className="mr-2 font-black" size={18} strokeWidth={3}/> SUCCESSFUL</>}
             {submitStatus === 'error' && <><AlertTriangle className="mr-2 font-black" size={18} strokeWidth={3}/> ERROR</>}
           </button>
+          {submitStatus === 'success' && (
+            <button onClick={resetForm} className="w-full py-4 rounded-2xl text-xs bg-white border-2 border-slate-950 text-slate-950 hover:bg-slate-950 hover:text-white transition-all flex items-center justify-center font-black gap-2">
+              <Plus size={16} strokeWidth={3}/> NEW VOUCHER
+            </button>
+          )}
         </div>
       </div>
       {/* ✅ EDIT SUPPLIER MODAL */}

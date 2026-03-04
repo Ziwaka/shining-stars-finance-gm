@@ -226,18 +226,20 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     if (itemList.length === 0 || submitStatus === 'processing') return;
     setSubmitStatus('processing');
     try {
-      // ✅ Items အားလုံး GAS သို့ ပို့ (Telegram မပါ)
+      // Items အားလုံး GAS သို့ ပို့
       for (const item of itemList) {
-        await sendToSheet(item);
+        const result = await sendToSheet(item);
+        console.log('sendToSheet result:', result);
       }
-      // ✅ အားလုံး ပြီးမှ Telegram တစ်ကြောင်းတည်း ပို့
-      await sendTelegramSummary(itemList);
+      // Telegram — error ဖြစ်ရင်လည်း submit success ဖြစ်ရမည်
+      sendTelegramSummary(itemList).catch(e => console.error('Telegram error:', e));
       setSubmitStatus('success');
       setItemList([]);
       setVoucherno('');
       onRefresh();
       setTimeout(() => setSubmitStatus('idle'), 3000);
     } catch (err) {
+      console.error('Submit error:', err);
       setSubmitStatus('error');
       setTimeout(() => setSubmitStatus('idle'), 3000);
     }
@@ -247,7 +249,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     await fetch('/api/gas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'telegramSummary', items }),
+      body: JSON.stringify({ action: 'telegram_summary', items }),
     });
   };
 

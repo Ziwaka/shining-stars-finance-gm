@@ -570,6 +570,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               <Plus className="mr-2 font-black" size={20} strokeWidth={4}/> ADD TO BATCH
             </button>
           </div>
+        </div>
 
       <div className="lg:col-span-4 flex flex-col bg-slate-50 border-l border-slate-200 font-black">
         <div className="bg-slate-200 p-5 text-slate-950 flex justify-between items-center font-black border-b border-slate-300">
@@ -612,6 +613,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             </button>
           )}
         </div>
+      </div>
       {/* ✅ EDIT SUPPLIER MODAL */}
       {showEditModal && editingSupplier && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">

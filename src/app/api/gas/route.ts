@@ -77,9 +77,11 @@ export async function POST(req: NextRequest) {
       }
       cache = null;
 
-        let telegramResult = 'skipped';
+      const first = items[0];
+      console.log('[sendVoucher] type:', first?.type);
+
+      let telegramResult = 'skipped';
         if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID && items.length > 0) {
-          const first = items[0];
           const isCashIn = first.type?.trim().toLowerCase() === 'cash in';
           const emoji = isCashIn ? '📥' : '📤';
           const grandTotal = items.reduce((s: number, i: any) => s + (parseFloat(i.cost_total) || 0), 0);

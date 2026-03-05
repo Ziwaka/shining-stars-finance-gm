@@ -5,7 +5,13 @@ import { Plus, Trash2, Save, RefreshCcw, Camera, ArrowUpRight, ArrowDownLeft, Ch
 export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [type, setType] = useState<'Cash Out' | 'Cash In'>('Cash Out');
   const [vendor, setVendor] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // ✅ Myanmar Time (UTC+6:30) — toISOString() UTC ဖြစ်တာကြောင့် offset ပေါင်းရမည်
+  const getMyanmarDate = () => {
+    const now = new Date();
+    const mmt = new Date(now.getTime() + (6 * 60 + 30) * 60 * 1000);
+    return mmt.toISOString().split('T')[0];
+  };
+  const [date, setDate] = useState(getMyanmarDate);
   const [voucherno, setVoucherno] = useState('');
   const [image, setImage] = useState<string>('');
   const [itemList, setItemList] = useState<any[]>([]);
@@ -82,12 +88,14 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const sub4Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3).map((row: any) => String(row.Sub_4 || row.sub4 || '')))).filter(Boolean), [sub3, config.categoryList, category, sub1, sub2]);
   const sub5Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3 && String(row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean), [sub4, config.categoryList, category, sub1, sub2, sub3]);
 
-  const generateVrID = (cat: string, currentBatch: any[]): string => {
-    const prefix = type === 'Cash In' ? 'INC' : (config.prefixes[cat] || 'EXP');
+  const generateVrID = (cat: string, currentBatch: any[], typeOverride?: string): string => {
+    const effectiveType = typeOverride ?? type;
+    const prefix = effectiveType === 'Cash In' ? 'INC' : (config.prefixes[cat] || 'EXP');
     const lastNum = config.lastSerials[prefix] || 0;
     const inBatchCount = currentBatch.filter(i => String(i.voucherno).startsWith(prefix)).length;
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
-    const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
+    // ✅ date string 'YYYY-MM-DD' ကို တိုက်ရိုက် split — UTC parse မလုပ်ဘူး
+    const month = date.split('-')[1] || (new Date().getMonth() + 1).toString().padStart(2, '0');
     const newId = `${prefix}-${month}-${nextNum}`;
     setVoucherno(newId);
     return newId;
@@ -152,7 +160,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const total = Math.round(countNum * costNum);
 
     // ✅ Vr. No. — batch ထဲ ပထမ item ဆိုရင် generate၊ မဟုတ်ရင် အရင် voucherno ကိုပဲ သုံး
-    const vrNo = itemList.length === 0 ? generateVrID(category, itemList) : voucherno;
+    const vrNo = itemList.length === 0 ? generateVrID(category, itemList, type) : voucherno;
 
     const newItem = {
       date, entered_by: enteredBy, account, vendor, type,
@@ -211,8 +219,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         {/* Type / User / Account */}
         <div className="flex flex-wrap items-center gap-4 bg-slate-50 border border-slate-200 p-2 rounded-2xl w-fit font-black">
           <div className="flex">
-            <button onClick={() => { setType('Cash Out'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
-            <button onClick={() => { setType('Cash In'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash In' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowUpRight size={16} className="mr-2"/> CASH IN</button>
+            <button onClick={() => { setType('Cash Out'); generateVrID(category, itemList, 'Cash Out'); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
+            <button onClick={() => { setType('Cash In'); generateVrID(category, itemList, 'Cash In'); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash In' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowUpRight size={16} className="mr-2"/> CASH IN</button>
           </div>
           <div className="h-6 w-[2px] bg-slate-300"/>
           <div className="flex items-center gap-2 px-2">
@@ -319,7 +327,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           {/* Date */}
           <div className="space-y-1 font-black">
             <label className="text-[10px] text-slate-500 tracking-widest font-black">DATE</label>
-            <input type="date" className="w-full bg-white border border-slate-300 p-3 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950" value={date} onChange={e => setDate(e.target.value)}/>
+            <input type="date" className="w-full bg-white border border-slate-300 p-3 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950" value={date} onChange={e => { setDate(e.target.value); if (voucherno) generateVrID(category, itemList, type); }}/>
           </div>
 
           {/* Voucher ID */}

@@ -1,37 +1,39 @@
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, RefreshCcw, Info } from 'lucide-react';
+import { ArrowLeft, RefreshCcw, ChevronDown } from 'lucide-react';
 
-// Vehicle-related keywords — Sub category မှာ ဒါပါရင် vehicle အဖြစ် သတ်မှတ်မည်
 const VEHICLE_PATTERN = /ferry|bus|ယာဉ်|vehicle|truck|van|car/i;
 
-const EXPENSE_MAP: Record<string, { label: string; color: string; dot: string }> = {
-  'FUEL'        : { label: '⛽ ဆီဖြည့်',          color: 'bg-amber-100 text-amber-800 border-amber-200',     dot: 'bg-amber-400'  },
-  'MAINTENANCE' : { label: '🔧 ပြုပြင်ထိန်းသိမ်း',  color: 'bg-rose-100 text-rose-800 border-rose-200',       dot: 'bg-rose-400'   },
-  'TYRE'        : { label: '🔘 တာယာ/လေချိန်',      color: 'bg-slate-100 text-slate-700 border-slate-200',    dot: 'bg-slate-400'  },
-  'DRIVER'      : { label: '👨 Driver ကုန်ကျ',      color: 'bg-blue-100 text-blue-800 border-blue-200',       dot: 'bg-blue-400'   },
-  'SERVICE'     : { label: '🛠 Service Fee',          color: 'bg-purple-100 text-purple-800 border-purple-200', dot: 'bg-purple-400' },
-  'ROAD FEE'    : { label: '🛣 လမ်းကြေး',             color: 'bg-green-100 text-green-800 border-green-200',   dot: 'bg-green-400'  },
-  'OTHER'       : { label: '📋 အခြား',               color: 'bg-slate-100 text-slate-600 border-slate-200',   dot: 'bg-slate-300'  },
+const EXPENSE_MAP: Record<string, { label: string; dot: string; color: string }> = {
+  'FUEL'        : { label: '⛽ ဆီဖြည့်',          dot: 'bg-amber-400',  color: 'bg-amber-100 text-amber-800 border-amber-200'     },
+  'MAINTENANCE' : { label: '🔧 ပြုပြင်ထိန်းသိမ်း',  dot: 'bg-rose-400',   color: 'bg-rose-100 text-rose-800 border-rose-200'       },
+  'TYRE'        : { label: '🔘 တာယာ/လေချိန်',      dot: 'bg-slate-400',  color: 'bg-slate-100 text-slate-700 border-slate-200'    },
+  'DRIVER'      : { label: '👨 Driver ကုန်ကျ',      dot: 'bg-blue-400',   color: 'bg-blue-100 text-blue-800 border-blue-200'       },
+  'SERVICE'     : { label: '🛠 Service Fee',          dot: 'bg-purple-400', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  'ROAD FEE'    : { label: '🛣 လမ်းကြေး',            dot: 'bg-green-400',  color: 'bg-green-100 text-green-800 border-green-200'   },
+  'OTHER'       : { label: '📋 အခြား',               dot: 'bg-slate-300',  color: 'bg-slate-100 text-slate-600 border-slate-200'   },
 };
 
 function getExpenseType(subs: string[], category: string): string {
   const all = [...subs, category].map(s => s?.toUpperCase().trim()).filter(Boolean);
   for (const s of all) {
-    if (/FUEL|ဆီ/.test(s))                                      return 'FUEL';
+    if (/FUEL|ဆီ/.test(s))                                       return 'FUEL';
     if (/MAINT|REPAIR|OIL|ENGINE|ပြုပြင်|BRAKE|FILTER/.test(s)) return 'MAINTENANCE';
-    if (/TYRE|တာယာ|လေချိန်|WHEEL/.test(s))                      return 'TYRE';
-    if (/DRIVER|SALARY|WAGE|ALLOWANCE/.test(s))                   return 'DRIVER';
-    if (/SERVICE FEE|SERVICE/.test(s))                            return 'SERVICE';
-    if (/ROAD|လမ်းကြေး|TOLL/.test(s))                            return 'ROAD FEE';
+    if (/TYRE|တာယာ|လေချိန်|WHEEL/.test(s))                       return 'TYRE';
+    if (/DRIVER|SALARY|WAGE|ALLOWANCE/.test(s))                    return 'DRIVER';
+    if (/SERVICE/.test(s))                                         return 'SERVICE';
+    if (/ROAD|လမ်းကြေး|TOLL/.test(s))                             return 'ROAD FEE';
   }
   return 'OTHER';
 }
 
+const fmt = (n: number) => n.toLocaleString();
+
 export default function VehiclesPage() {
-  const [vouchers, setVouchers] = useState<any[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [vouchers, setVouchers]   = useState<any[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -42,207 +44,220 @@ export default function VehiclesPage() {
   };
   useEffect(() => { load(); }, []);
 
-  // Normalize
   const rows = useMemo(() => (vouchers || []).flatMap(v => {
-    const typeStr = (v.type || '').toString().trim().toLowerCase();
-    if (typeStr === 'cash in') return [];
-    const rawCost = v['cost_(total)'] || v.cost_total || 0;
-    const amount  = Math.round(Number(rawCost) || 0);
+    if ((v.type||'').toString().trim().toLowerCase() === 'cash in') return [];
+    const amount  = Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
     const remark  = (v.remark || v.Remark || '').toString();
-    const kmMatch = remark.match(/KM:([\d.]+)/i);
-    const km      = kmMatch ? parseFloat(kmMatch[1]) : 0;
-    const subs    = [
-      (v.sub_1 || v.sub1 || '').toString().toUpperCase().trim(),
-      (v.sub_2 || v.sub2 || '').toString().toUpperCase().trim(),
-      (v.sub_3 || v.sub3 || '').toString().toUpperCase().trim(),
-      (v.sub_4 || v.sub4 || '').toString().toUpperCase().trim(),
-      (v.sub_5 || v.sub5 || '').toString().toUpperCase().trim(),
-    ].filter(Boolean);
-    const category = (v.category || '').toString().toUpperCase().trim();
-    return [{ 
-      date: (v.date||'').toString().split('T')[0],
-      category, subs,
-      item: (v.item_description || v['item_description'] || '').toString(),
-      vendor: (v.vendor || '').toString(),
-      note: (v.note || '').toString(),
-      voucherno: (v.voucher_no || v.voucherno || '').toString(),
-      amount, km,
-    }];
+    const km      = (() => { const m = remark.match(/KM:([\d.]+)/i); return m ? parseFloat(m[1]) : 0; })();
+    const subs    = [1,2,3,4,5].map(i => (v[`sub_${i}`]||v[`sub${i}`]||'').toString().toUpperCase().trim()).filter(Boolean);
+    const category = (v.category||'').toString().toUpperCase().trim();
+    const dateStr  = (v.date||'').toString().split('T')[0];
+    return [{ date: dateStr, month: dateStr.slice(0,7), category, subs, item: (v.item_description||v['item_description']||'').toString(), vendor: (v.vendor||'').toString(), note: (v.note||'').toString(), voucherno: (v.voucher_no||v.voucherno||'').toString(), amount, km }];
   }), [vouchers]);
 
-  // Auto-detect vehicle names from Sub categories only (not from Category)
-  // Category = FERRY ဆိုသည် parent category သာဖြစ်သည် — vehicle name မဟုတ်
-  // BUS 1 / BUS 2 တို့သည် Sub category ထဲမှ vehicle names
   const vehicleNames = useMemo(() => {
-    const names = new Set<string>();
-    rows.forEach(r => {
-      r.subs.forEach(s => { if (VEHICLE_PATTERN.test(s)) names.add(s); });
-    });
-    return Array.from(names).sort();
+    const s = new Set<string>();
+    rows.forEach(r => r.subs.forEach(sub => { if (VEHICLE_PATTERN.test(sub)) s.add(sub); }));
+    return Array.from(s).sort();
   }, [rows]);
 
-  // Per-vehicle stats — sub ထဲမှာ vname ပါတဲ့ rows ပဲ ယူမည်
+  const allMonths = useMemo(() => {
+    const s = new Set<string>();
+    rows.forEach(r => { if(r.month) s.add(r.month); });
+    return Array.from(s).sort().reverse();
+  }, [rows]);
+
   const vehicleData = useMemo(() => vehicleNames.map(vname => {
-    const vrows = rows.filter(r => r.subs.includes(vname));
-    const total = vrows.reduce((s, r) => s + r.amount, 0);
-
-    const byType: Record<string, number> = {};
-    vrows.forEach(r => {
-      const t = getExpenseType(r.subs, r.category);
-      byType[t] = (byType[t] || 0) + r.amount;
-    });
-
-    // km stats from fuel rows with km data
-    const fuelWithKm = vrows
-      .filter(r => getExpenseType(r.subs, r.category) === 'FUEL' && r.km > 0)
-      .sort((a, b) => b.km - a.km);
-    const latestKm   = fuelWithKm[0]?.km || 0;
-    const oldestKm   = fuelWithKm[fuelWithKm.length - 1]?.km || 0;
-    const totalKm    = fuelWithKm.length >= 2 ? latestKm - oldestKm : 0;
-    const costPerKm  = totalKm > 0 ? total / totalKm : 0;
-
-    const logs = [...vrows].sort((a, b) => b.date.localeCompare(a.date));
-
-    return { name: vname, total, byType, latestKm, totalKm, costPerKm, logs };
+    const vrows  = rows.filter(r => r.subs.includes(vname));
+    const total  = vrows.reduce((s,r) => s+r.amount, 0);
+    const byType: Record<string,number> = {};
+    vrows.forEach(r => { const t=getExpenseType(r.subs,r.category); byType[t]=(byType[t]||0)+r.amount; });
+    const byMonth: Record<string,number> = {};
+    vrows.forEach(r => { byMonth[r.month]=(byMonth[r.month]||0)+r.amount; });
+    const fuelKm  = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL'&&r.km>0).sort((a,b)=>b.km-a.km);
+    const latestKm = fuelKm[0]?.km||0, oldestKm=fuelKm[fuelKm.length-1]?.km||0;
+    const totalKm  = fuelKm.length>=2 ? latestKm-oldestKm : 0;
+    const costPerKm = totalKm>0 ? total/totalKm : 0;
+    const logs = [...vrows].sort((a,b)=>b.date.localeCompare(a.date));
+    return { name:vname, total, byType, byMonth, latestKm, totalKm, costPerKm, logs };
   }), [vehicleNames, rows]);
 
-  const grandTotal = vehicleData.reduce((s, v) => s + v.total, 0);
+  const grandTotal = vehicleData.reduce((s,v)=>s+v.total,0);
+  const grandByMonth: Record<string,number> = {};
+  rows.filter(r=>r.subs.some(s=>VEHICLE_PATTERN.test(s))).forEach(r=>{ grandByMonth[r.month]=(grandByMonth[r.month]||0)+r.amount; });
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-lg mx-auto">
 
         {/* Header */}
-        <div className="flex items-center gap-3 p-5 border-b border-slate-200 bg-white sticky top-0 z-10">
-          <Link href="/" className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors">
-            <ArrowLeft size={16}/>
-          </Link>
-          <div className="flex-1">
+        <div className="flex items-center gap-3 px-4 py-4 bg-white border-b border-slate-200 sticky top-0 z-10">
+          <Link href="/" className="p-2 bg-slate-100 rounded-xl"><ArrowLeft size={16}/></Link>
+          <div className="flex-1 min-w-0">
             <h1 className="text-sm font-black uppercase tracking-widest">Vehicle Monitor</h1>
-            <p className="text-[10px] text-slate-400">{vehicleNames.length} vehicles · Voucher data auto</p>
+            <p className="text-[10px] text-slate-400">{vehicleNames.length} vehicles</p>
           </div>
-          <button onClick={load} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200">
-            <RefreshCcw size={15} className={loading ? 'animate-spin' : ''}/>
+          <button onClick={load} className="p-2 bg-slate-100 rounded-xl shrink-0">
+            <RefreshCcw size={15} className={loading?'animate-spin':''}/>
           </button>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
-            <RefreshCcw className="animate-spin text-slate-300" size={28}/>
+          <div className="flex justify-center py-24"><RefreshCcw className="animate-spin text-slate-300" size={28}/></div>
+        ) : vehicleNames.length === 0 ? (
+          <div className="m-4 bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
+            <p className="text-4xl">🚌</p>
+            <p className="text-sm font-black text-slate-400 uppercase">Vehicle data မရှိသေးပါ</p>
+            <p className="text-[11px] text-slate-300">Voucher Sub category မှာ BUS 1 / BUS 2 / FERRY ထည့်ပါ</p>
           </div>
         ) : (
-          <div className="p-4 space-y-5">
+          <div className="p-3 space-y-3">
 
-            {/* Tip */}
-            <div className="bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3 flex gap-3">
-              <Info size={14} className="text-blue-500 shrink-0 mt-0.5"/>
-              <p className="text-[11px] text-blue-700 font-black leading-relaxed">
-                Voucher Sub category မှာ <strong>FERRY / BUS 1 / BUS 2</strong> ထည့်ထားရင် ဒီမှာ auto ပေါ်မည်။ ယာဉ်အသစ် ထပ်ထည့်လည်း အလိုအလျောက် ပေါ်မည်။
-              </p>
+            {/* ══ GRAND BANNER ══ */}
+            <div className="bg-slate-950 text-white rounded-2xl overflow-hidden">
+              <div className="px-5 pt-5 pb-4">
+                <p className="text-[10px] tracking-widest uppercase text-slate-400 mb-1">ယာဉ် အားလုံး · စုစုပေါင်း</p>
+                <p className="text-3xl font-black">{fmt(grandTotal)} <span className="text-sm text-slate-400">MMK</span></p>
+              </div>
+              {/* Per-vehicle quick row */}
+              <div className="grid border-t border-slate-800" style={{gridTemplateColumns:`repeat(${Math.min(vehicleData.length,3)},1fr)`}}>
+                {vehicleData.map(v=>(
+                  <div key={v.name} className="px-4 py-3 border-r border-slate-800 last:border-r-0">
+                    <p className="text-[9px] text-slate-500 uppercase font-black truncate">{v.name}</p>
+                    <p className="text-sm font-black text-slate-200 mt-0.5">{fmt(v.total)}</p>
+                  </div>
+                ))}
+              </div>
+              {/* Grand monthly */}
+              {allMonths.length > 0 && (
+                <div className="border-t border-slate-800 px-5 py-3">
+                  <p className="text-[9px] text-slate-500 uppercase font-black mb-2">လစဉ် ကုန်ကျစရိတ်</p>
+                  <div className="space-y-1.5">
+                    {allMonths.map(m=>{
+                      const amt=grandByMonth[m]||0;
+                      return (
+                        <div key={m} className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400 w-12 shrink-0">{m.slice(5)} လ</span>
+                          <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-slate-400 rounded-full" style={{width:`${grandTotal>0?(amt/grandTotal)*100:0}%`}}/>
+                          </div>
+                          <span className="text-[10px] font-black text-slate-300 w-20 text-right shrink-0">{fmt(amt)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {vehicleNames.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-2">
-                <p className="text-2xl">🚌</p>
-                <p className="text-sm font-black text-slate-400 uppercase">Vehicle data မရှိသေးပါ</p>
-                <p className="text-[10px] text-slate-300">Voucher Sub category မှာ FERRY / BUS 1 စသည် ထည့်ပါ</p>
-              </div>
-            ) : (
-              <>
-                {/* Grand Total */}
-                <div className="bg-slate-950 text-white rounded-2xl p-5 space-y-3">
-                  <p className="text-[10px] tracking-widest uppercase text-slate-400">ယာဉ် အားလုံး · စုစုပေါင်း</p>
-                  <p className="text-3xl font-black">{grandTotal.toLocaleString()} <span className="text-sm text-slate-400">MMK</span></p>
-                  {vehicleData.length > 1 && (
-                    <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-800">
-                      {vehicleData.map(v => (
-                        <div key={v.name}>
-                          <p className="text-[9px] text-slate-500 uppercase font-black">{v.name}</p>
-                          <p className="text-xs font-black text-slate-300">{v.total.toLocaleString()}</p>
+            {/* ══ PER VEHICLE — always visible summary, collapsible log ══ */}
+            {vehicleData.map(vd => {
+              const logOpen = expandedLog === vd.name;
+              return (
+                <div key={vd.name} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+
+                  {/* ── Vehicle header ── */}
+                  <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-100">
+                    <p className="text-sm font-black uppercase">🚌 {vd.name}</p>
+                    <span className="text-sm font-black">{fmt(vd.total)} MMK</span>
+                  </div>
+
+                  {/* ── Summary grid: cost breakdown + monthly ── */}
+                  <div className="grid grid-cols-2 divide-x divide-slate-100">
+                    {/* Cost by type */}
+                    <div className="px-4 py-3 space-y-2">
+                      <p className="text-[9px] text-slate-400 uppercase font-black">ကုန်ကျ အမျိုးအစား</p>
+                      {Object.entries(vd.byType).sort((a,b)=>b[1]-a[1]).map(([type,amt])=>{
+                        const et=EXPENSE_MAP[type]||EXPENSE_MAP['OTHER'];
+                        return (
+                          <div key={type} className="space-y-0.5">
+                            <div className="flex justify-between items-center gap-1">
+                              <span className="text-[10px] text-slate-600 truncate">{et.label}</span>
+                              <span className="text-[10px] font-black shrink-0">{fmt(amt)}</span>
+                            </div>
+                            <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                              <div className={`h-full ${et.dot} rounded-full`} style={{width:`${vd.total>0?(amt/vd.total)*100:0}%`}}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Monthly */}
+                    <div className="px-4 py-3 space-y-2">
+                      <p className="text-[9px] text-slate-400 uppercase font-black">လစဉ်</p>
+                      {allMonths.filter(m=>vd.byMonth[m]).map(m=>{
+                        const amt=vd.byMonth[m];
+                        return (
+                          <div key={m} className="space-y-0.5">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] text-slate-500 font-black">{m.slice(5)} လ</span>
+                              <span className="text-[10px] font-black">{fmt(amt)}</span>
+                            </div>
+                            <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-slate-400 rounded-full" style={{width:`${vd.total>0?(amt/vd.total)*100:0}%`}}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ── KM stats ── */}
+                  {(vd.latestKm>0||vd.costPerKm>0) && (
+                    <div className="grid grid-cols-3 divide-x divide-slate-100 border-t border-slate-100">
+                      {[
+                        {label:'Total KM',  value:vd.totalKm>0   ? fmt(vd.totalKm)              : '—', unit:'km'},
+                        {label:'Cost/KM',   value:vd.costPerKm>0 ? fmt(Math.round(vd.costPerKm)) : '—', unit:'MMK'},
+                        {label:'Odometer',  value:vd.latestKm>0  ? fmt(vd.latestKm)             : '—', unit:'km'},
+                      ].map((k,i)=>(
+                        <div key={i} className="px-2 py-2 text-center">
+                          <p className="text-[9px] text-slate-400 uppercase font-black">{k.label}</p>
+                          <p className="text-sm font-black mt-0.5">{k.value}</p>
+                          <p className="text-[9px] text-slate-400">{k.unit}</p>
                         </div>
                       ))}
                     </div>
                   )}
-                </div>
 
-                {/* Per Vehicle */}
-                {vehicleData.map(vd => (
-                  <div key={vd.name} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                  {/* ── Log toggle button ── */}
+                  <button
+                    onClick={()=>setExpandedLog(logOpen ? null : vd.name)}
+                    className="w-full flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors"
+                  >
+                    <span className="text-[11px] font-black text-slate-500 uppercase">မှတ်တမ်း {vd.logs.length} ခု</span>
+                    <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${logOpen?'rotate-180':''}`}/>
+                  </button>
 
-                    {/* Vehicle header */}
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                      <p className="text-sm font-black uppercase">🚌 {vd.name}</p>
-                      <span className="text-xs font-black text-slate-500">{vd.total.toLocaleString()} MMK</span>
-                    </div>
-
-                    {/* KPI row — km data ရှိမှ ပေါ်မည် */}
-                    {(vd.latestKm > 0 || vd.costPerKm > 0) && (
-                      <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100">
-                        {[
-                          { label: 'Total KM',  value: vd.totalKm > 0 ? vd.totalKm.toLocaleString() : '—',                    unit: 'km'  },
-                          { label: 'Cost/KM',   value: vd.costPerKm > 0 ? Math.round(vd.costPerKm).toLocaleString() : '—',    unit: 'MMK' },
-                          { label: 'Odometer',  value: vd.latestKm > 0 ? vd.latestKm.toLocaleString() : '—',                  unit: 'km'  },
-                        ].map((k, i) => (
-                          <div key={i} className="px-3 py-3 text-center">
-                            <p className="text-[9px] text-slate-400 uppercase font-black">{k.label}</p>
-                            <p className="text-base font-black mt-0.5">{k.value}</p>
-                            <p className="text-[9px] text-slate-400">{k.unit}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Cost breakdown */}
-                    {vd.total > 0 && (
-                      <div className="px-4 py-3 space-y-2">
-                        {Object.entries(vd.byType).sort((a,b) => b[1]-a[1]).map(([type, amt]) => {
-                          const et = EXPENSE_MAP[type] || EXPENSE_MAP['OTHER'];
-                          return (
-                            <div key={type} className="flex items-center gap-2">
-                              <span className="text-[10px] font-black text-slate-500 w-24 shrink-0">{et.label}</span>
-                              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className={`h-full ${et.dot} rounded-full`} style={{width:`${(amt/vd.total)*100}%`}}/>
+                  {/* ── Log detail (collapsible) ── */}
+                  {logOpen && (
+                    <div className="divide-y divide-slate-50 border-t border-slate-100">
+                      {vd.logs.map((r,i)=>{
+                        const etype=EXPENSE_MAP[getExpenseType(r.subs,r.category)]||EXPENSE_MAP['OTHER'];
+                        return (
+                          <div key={i} className="flex items-start justify-between px-4 py-3 gap-3">
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full border ${etype.color}`}>{etype.label}</span>
+                              {r.item   && <p className="text-xs text-slate-700 truncate">{r.item}</p>}
+                              {r.note   && <p className="text-[10px] text-slate-400 truncate">{r.note}</p>}
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                                <span className="text-[9px] text-slate-400">{r.date}</span>
+                                {r.voucherno && <span className="text-[9px] text-slate-400">{r.voucherno}</span>}
+                                {r.vendor    && <span className="text-[9px] text-slate-400 truncate max-w-[80px]">{r.vendor}</span>}
+                                {r.km>0      && <span className="text-[9px] text-blue-500 font-black">🛣 {fmt(r.km)} km</span>}
                               </div>
-                              <span className="text-[10px] font-black text-slate-700 w-24 text-right shrink-0">{amt.toLocaleString()} MMK</span>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                            <span className="text-sm font-black shrink-0">{fmt(r.amount)} MMK</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                    {/* Log */}
-                    {vd.logs.length > 0 && (
-                      <div className="border-t border-slate-100">
-                        <div className="px-4 py-2 bg-slate-50">
-                          <p className="text-[10px] font-black text-slate-400 uppercase">မှတ်တမ်း ({vd.logs.length})</p>
-                        </div>
-                        <div className="divide-y divide-slate-50">
-                          {vd.logs.map((r, i) => {
-                            const etype = EXPENSE_MAP[getExpenseType(r.subs, r.category)] || EXPENSE_MAP['OTHER'];
-                            return (
-                              <div key={i} className="flex items-start justify-between px-4 py-3">
-                                <div className="space-y-1 flex-1 min-w-0">
-                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${etype.color}`}>{etype.label}</span>
-                                  {r.item && <p className="text-xs text-slate-700 truncate">{r.item}</p>}
-                                  {r.note && <p className="text-[10px] text-slate-400 truncate">{r.note}</p>}
-                                  <div className="flex gap-3 flex-wrap">
-                                    <span className="text-[9px] text-slate-400">{r.date}</span>
-                                    {r.voucherno && <span className="text-[9px] text-slate-400">{r.voucherno}</span>}
-                                    {r.vendor    && <span className="text-[9px] text-slate-400">{r.vendor}</span>}
-                                    {r.km > 0    && <span className="text-[9px] text-blue-500 font-black">🛣 {r.km.toLocaleString()} km</span>}
-                                  </div>
-                                </div>
-                                <span className="text-sm font-black shrink-0 ml-3">{r.amount.toLocaleString()} MMK</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </>
-            )}
+                </div>
+              );
+            })}
+
           </div>
         )}
       </div>

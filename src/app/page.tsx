@@ -156,6 +156,9 @@ export default function Home() {
                 <span className="text-[10px] font-black text-slate-950">LIVE SYNC</span>
               </div>
             )}
+            <Link href="/vehicles" className="bg-white text-slate-950 border border-slate-200 px-6 py-4 rounded-3xl shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2 font-black text-sm">
+              🚌 VEHICLES
+            </Link>
             <Link href="/suppliers" className="bg-white text-slate-950 border border-slate-200 px-6 py-4 rounded-3xl shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2 font-black text-sm">
               <Users size={16}/> SUPPLIERS
             </Link>

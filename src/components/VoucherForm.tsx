@@ -5,13 +5,7 @@ import { Plus, Trash2, Save, RefreshCcw, Camera, ArrowUpRight, ArrowDownLeft, Ch
 export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [type, setType] = useState<'Cash Out' | 'Cash In'>('Cash Out');
   const [vendor, setVendor] = useState('');
-  // ✅ Myanmar Time (UTC+6:30) — toISOString() UTC ဖြစ်တာကြောင့် offset ပေါင်းရမည်
-  const getMyanmarDate = () => {
-    const now = new Date();
-    const mmt = new Date(now.getTime() + (6 * 60 + 30) * 60 * 1000);
-    return mmt.toISOString().split('T')[0];
-  };
-  const [date, setDate] = useState(getMyanmarDate);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [voucherno, setVoucherno] = useState('');
   const [image, setImage] = useState<string>('');
   const [itemList, setItemList] = useState<any[]>([]);
@@ -24,7 +18,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [sub3, setSub3] = useState('');
   const [sub4, setSub4] = useState('');
   const [sub5, setSub5] = useState('');
-  const [currentItem, setCurrentItem] = useState({ item_description: '', brand: '', count: '' as any, cost_piece: '' as any, note: '' });
+  const [currentItem, setCurrentItem] = useState({ item_description: '', brand: '', count: '' as any, cost_piece: '' as any, note: '', km: '' as any });
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [toastMsg, setToastMsg] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -88,14 +82,12 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const sub4Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3).map((row: any) => String(row.Sub_4 || row.sub4 || '')))).filter(Boolean), [sub3, config.categoryList, category, sub1, sub2]);
   const sub5Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3 && String(row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean), [sub4, config.categoryList, category, sub1, sub2, sub3]);
 
-  const generateVrID = (cat: string, currentBatch: any[], typeOverride?: string): string => {
-    const effectiveType = typeOverride ?? type;
-    const prefix = effectiveType === 'Cash In' ? 'INC' : (config.prefixes[cat] || 'EXP');
+  const generateVrID = (cat: string, currentBatch: any[]): string => {
+    const prefix = type === 'Cash In' ? 'INC' : (config.prefixes[cat] || 'EXP');
     const lastNum = config.lastSerials[prefix] || 0;
     const inBatchCount = currentBatch.filter(i => String(i.voucherno).startsWith(prefix)).length;
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
-    // ✅ date string 'YYYY-MM-DD' ကို တိုက်ရိုက် split — UTC parse မလုပ်ဘူး
-    const month = date.split('-')[1] || (new Date().getMonth() + 1).toString().padStart(2, '0');
+    const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
     const newId = `${prefix}-${month}-${nextNum}`;
     setVoucherno(newId);
     return newId;
@@ -148,7 +140,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const resetForm = () => {
     setVendor(''); setSupplierSearch(''); setSelectedSupplier(null);
     setCategory(''); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
-    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '' });
+    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '', km: '' });
     setItemSearch(''); setImage(''); setVoucherno('');
     setSubmitStatus('idle');
   };
@@ -160,7 +152,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const total = Math.round(countNum * costNum);
 
     // ✅ Vr. No. — batch ထဲ ပထမ item ဆိုရင် generate၊ မဟုတ်ရင် အရင် voucherno ကိုပဲ သုံး
-    const vrNo = itemList.length === 0 ? generateVrID(category, itemList, type) : voucherno;
+    const vrNo = itemList.length === 0 ? generateVrID(category, itemList) : voucherno;
 
     const newItem = {
       date, entered_by: enteredBy, account, vendor, type,
@@ -173,12 +165,14 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         ? `${currentItem.item_description} (${currentItem.brand})`
         : currentItem.item_description,
       note: currentItem.note,
+      km: parseFloat(currentItem.km) || 0,
+      remark: currentItem.km ? `KM:${currentItem.km}` : '',
       count: countNum, cost_piece: costNum, cost_total: total, image_data: image, id: Date.now()
     };
     setItemList(prev => [...prev, newItem]);
     setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`);
     setTimeout(() => setToastMsg(''), 3000);
-    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '' });
+    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '', km: '' });
     setItemSearch('');
     setImage('');
   };
@@ -219,8 +213,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         {/* Type / User / Account */}
         <div className="flex flex-wrap items-center gap-4 bg-slate-50 border border-slate-200 p-2 rounded-2xl w-fit font-black">
           <div className="flex">
-            <button onClick={() => { setType('Cash Out'); generateVrID(category, itemList, 'Cash Out'); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
-            <button onClick={() => { setType('Cash In'); generateVrID(category, itemList, 'Cash In'); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash In' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowUpRight size={16} className="mr-2"/> CASH IN</button>
+            <button onClick={() => { setType('Cash Out'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
+            <button onClick={() => { setType('Cash In'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash In' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowUpRight size={16} className="mr-2"/> CASH IN</button>
           </div>
           <div className="h-6 w-[2px] bg-slate-300"/>
           <div className="flex items-center gap-2 px-2">
@@ -327,7 +321,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           {/* Date */}
           <div className="space-y-1 font-black">
             <label className="text-[10px] text-slate-500 tracking-widest font-black">DATE</label>
-            <input type="date" className="w-full bg-white border border-slate-300 p-3 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950" value={date} onChange={e => { setDate(e.target.value); if (voucherno) generateVrID(category, itemList, type); }}/>
+            <input type="date" className="w-full bg-white border border-slate-300 p-3 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950" value={date} onChange={e => setDate(e.target.value)}/>
           </div>
 
           {/* Voucher ID */}
@@ -443,6 +437,16 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               <textarea className="w-full p-4 bg-white border border-slate-300 rounded-xl text-[10px] outline-none focus:border-slate-500 h-16 resize-none font-black text-slate-950" value={currentItem.note} onChange={e => setCurrentItem({ ...currentItem, note: e.target.value })}/>
             </div>
 
+            {/* KM (only for vehicle categories) */}
+            {[category, sub1, sub2, sub3].some(s => /ferry|bus\s*\d*|ယာဉ်/i.test(s)) && (
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-500 uppercase flex items-center font-black">
+                <span className="mr-1">🛣</span> KM / ODOMETER <span className="text-slate-300 normal-case font-normal ml-1">(optional)</span>
+              </label>
+              <input type="number" className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xl text-center text-slate-950 outline-none focus:border-slate-500 font-black" placeholder="—" value={currentItem.km} onChange={e => setCurrentItem({ ...currentItem, km: e.target.value })}/>
+            </div>
+            )}
+
             {/* Per-item photo */}
             <div className="space-y-1">
               <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1 font-black"><Camera size={12}/> ITEM PHOTO <span className="text-slate-300 normal-case font-normal">(optional)</span></label>
@@ -489,6 +493,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                 <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="text-rose-500 p-1"><Trash2 size={14}/></button>
               </div>
               {i.note && <p className="text-[9px] text-slate-500 mt-2">NOTE: {i.note}</p>}
+              {i.km > 0 && <p className="text-[9px] text-blue-600 mt-1">🛣 {i.km.toLocaleString()} km</p>}
               {i.image_data && <p className="text-[9px] text-emerald-600 mt-1">📷 PHOTO ATTACHED</p>}
               <div className="flex justify-between items-end mt-4">
                 <p className="text-[9px] text-slate-500">{i.count} X {i.cost_piece.toLocaleString()} MMK</p>

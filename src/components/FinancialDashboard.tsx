@@ -236,16 +236,28 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
           </div>
         </div>
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 min-h-[320px]">
-          <h3 className="text-[10px] text-slate-500 mb-6 flex items-center gap-2 tracking-widest"><Layers size={14}/> EXPENSE ALLOCATION</h3>
-          <div className="h-[240px] w-full">
+          <h3 className="text-[10px] text-slate-500 mb-4 flex items-center gap-2 tracking-widest"><Layers size={14}/> EXPENSE ALLOCATION</h3>
+          <div className="h-[200px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={analytics.categories} innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value" stroke="none" labelLine={true} label={renderPieLabel}>
+                <Pie data={analytics.categories} innerRadius={55} outerRadius={80} paddingAngle={4} dataKey="value" stroke="none" label={false}>
                   {analytics.categories.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
                 </Pie>
                 <Tooltip formatter={(val: any) => Number(val).toLocaleString() + ' MMK'}/>
               </PieChart>
             </ResponsiveContainer>
+          </div>
+          {/* Legend list — mobile friendly */}
+          <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+            {analytics.categories.sort((a:any,b:any)=>b.value-a.value).map((cat: any, i: number) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{backgroundColor: COLORS[i % COLORS.length]}}/>
+                  <span className="text-[10px] font-black text-slate-700 truncate uppercase">{cat.name}</span>
+                </div>
+                <span className="text-[10px] font-black text-slate-500 shrink-0">{cat.value.toLocaleString()}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

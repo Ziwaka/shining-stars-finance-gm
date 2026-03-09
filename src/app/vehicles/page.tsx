@@ -31,15 +31,20 @@ function getExpenseType(subs: string[], category: string): string {
 const fmt = (n: number) => n.toLocaleString();
 
 export default function VehiclesPage() {
-  const [vouchers, setVouchers]   = useState<any[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [vouchers, setVouchers]         = useState<any[]>([]);
+  const [vehicleStartKm, setVehicleStartKm] = useState<Record<string,number>>({});
+  const [loading, setLoading]           = useState(true);
+  const [expandedLog, setExpandedLog]   = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
     fetch('/api/gas?t=' + Date.now())
       .then(r => r.json())
-      .then(d => { setVouchers(d.vouchers || []); setLoading(false); })
+      .then(d => {
+        setVouchers(d.vouchers || []);
+        setVehicleStartKm(d.vehicleStartKm || {});
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
@@ -77,16 +82,17 @@ export default function VehiclesPage() {
     const fuelKm   = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL'&&r.km>0).sort((a,b)=>a.km-b.km);
     const anyKm    = vrows.filter(r=>r.km>0).sort((a,b)=>a.km-b.km);
     const latestKm = anyKm.length>0 ? anyKm[anyKm.length-1].km : 0;
-    const oldestKm = anyKm.length>0 ? anyKm[0].km : 0;
-    // totalKm — entry ၁ ခုရှိရင် တစ်ခုတည်းကို ပြ၊ ၂ ခုရှိရင် diff တွက်
-    const totalKm  = anyKm.length>=2 ? latestKm-oldestKm : latestKm;
+    // Starting KM — Config မှာ သတ်မှတ်ထားတာ၊ မရှိရင် voucher ထဲ အနည်းဆုံး km သုံး
+    const startKm  = vehicleStartKm[vname] || (anyKm.length>0 ? anyKm[0].km : 0);
+    // Total KM — latest odometer − starting km
+    const totalKm  = latestKm > startKm ? latestKm - startKm : 0;
     const fuelTotal = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL').reduce((s,r)=>s+r.amount,0);
     // Cost/KM ၂ မျိုး
     const fuelCostPerKm  = totalKm>0 ? fuelTotal/totalKm : 0;   // ဆီကုန်ကျ / km
     const totalCostPerKm = totalKm>0 ? total/totalKm : 0;        // စုစုပေါင်းကုန်ကျ / km
     const logs = [...vrows].sort((a,b)=>b.date.localeCompare(a.date));
     return { name:vname, total, byType, byMonth, latestKm, totalKm, fuelCostPerKm, totalCostPerKm, logs };
-  }), [vehicleNames, rows]);
+  }), [vehicleNames, rows, vehicleStartKm]);
 
   const grandTotal = vehicleData.reduce((s,v)=>s+v.total,0);
   const grandByMonth: Record<string,number> = {};

@@ -19,11 +19,12 @@ async function fetchFromGAS(): Promise<any> {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const force = req.nextUrl.searchParams.get('force') === '1';
   const now = Date.now();
   const isStale = !cache || (now - cache.fetchedAt) > CACHE_TTL;
-  if (cache && !isStale) return NextResponse.json(cache.data, { headers: { 'X-Cache': 'HIT' } });
-  if (cache && isStale && !isFetching) {
+  if (cache && !isStale && !force) return NextResponse.json(cache.data, { headers: { 'X-Cache': 'HIT' } });
+  if (cache && isStale && !isFetching && !force) {
     isFetching = true;
     fetchFromGAS().then(data => { cache = { data, fetchedAt: Date.now() }; }).catch(() => {}).finally(() => { isFetching = false; });
     return NextResponse.json(cache.data, { headers: { 'X-Cache': 'STALE' } });

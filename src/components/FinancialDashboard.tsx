@@ -21,7 +21,7 @@ function getPresetDates(preset: string) {
 }
 
 export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouchers: any[], onRefresh?: () => void }) {
-  const [filter, setFilter]           = useState({ startDate:'', endDate:'', category:'', subCategory:'', vendor:'', item:'' });
+  const [filter, setFilter]           = useState({ startDate:'', endDate:'', category:'', subCategory:'', vendor:'', item:'', enteredBy:'' });
   const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });

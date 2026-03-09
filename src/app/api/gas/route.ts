@@ -4,129 +4,135 @@ const GAS_URL = process.env.GAS_URL!;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// ✅ Stale-while-revalidate cache
-// Vercel serverless မှာ module-level variable က request တစ်ခုမှ နောက်တစ်ခုသို့ survive ဖြစ်တတ်သည်
-// Production မှာ 60–80% hit rate ရနိုင်သည်
 let cache: { data: any; fetchedAt: number } | null = null;
-const CACHE_TTL = 120_000; // 2 မိနစ် — stale ဖြစ်မည့်အချိန်
-let isFetching = false;   // background fetch race condition ကာကွယ်ရန်
+const CACHE_TTL = 120_000;
+let isFetching = false;
 
 async function fetchFromGAS(): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const res = await fetch(`${GAS_URL}?t=${Date.now()}`, {
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    const res = await fetch(`${GAS_URL}?t=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
     return await res.json();
   } finally {
     clearTimeout(timeout);
   }
 }
 
-// GET — stale-while-revalidate logic
 export async function GET() {
   const now = Date.now();
   const isStale = !cache || (now - cache.fetchedAt) > CACHE_TTL;
-
-  // ✅ Cache ရှိပြီး stale မဖြစ်သေးရင် — ချက်ချင်းပြ
-  if (cache && !isStale) {
-    return NextResponse.json(cache.data, {
-      headers: { 'X-Cache': 'HIT' },
-    });
-  }
-
-  // ✅ Stale cache ရှိသောအခါ — ဟောင်းသောဟာကို ချက်ချင်းပြပြီး background မှာ refresh
+  if (cache && !isStale) return NextResponse.json(cache.data, { headers: { 'X-Cache': 'HIT' } });
   if (cache && isStale && !isFetching) {
     isFetching = true;
-    // Background fetch — await မလုပ်သောကြောင့် response ကို block မလုပ်
-    fetchFromGAS()
-      .then(data => { cache = { data, fetchedAt: Date.now() }; })
-      .catch(() => {}) // background fail ဖြစ်ရင် stale data ဆက်သုံးမည်
-      .finally(() => { isFetching = false; });
-
-    return NextResponse.json(cache.data, {
-      headers: { 'X-Cache': 'STALE' },
-    });
+    fetchFromGAS().then(data => { cache = { data, fetchedAt: Date.now() }; }).catch(() => {}).finally(() => { isFetching = false; });
+    return NextResponse.json(cache.data, { headers: { 'X-Cache': 'STALE' } });
   }
-
-  // ✅ Cache လုံးဝ မရှိသောအခါ (ပထမဆုံး request) — GAS ကို တိုက်ရိုက်ခေါ်မည်
   try {
     isFetching = true;
     const data = await fetchFromGAS();
     cache = { data, fetchedAt: Date.now() };
-    return NextResponse.json(data, {
-      headers: { 'X-Cache': 'MISS' },
-    });
+    return NextResponse.json(data, { headers: { 'X-Cache': 'MISS' } });
   } catch (err: any) {
-    const isTimeout = err.name === 'AbortError';
-    return NextResponse.json(
-      { error: isTimeout ? 'timeout' : 'fetch_failed', vouchers: [] },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: err.name === 'AbortError' ? 'timeout' : 'fetch_failed', vouchers: [] }, { status: 503 });
   } finally {
     isFetching = false;
   }
 }
 
-// POST — send / delete (cache invalidate ပါ)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action } = body;
 
     if (action === 'delete') {
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', voucherno: body.voucherno }),
-      });
+      const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', voucherno: body.voucherno }) });
       const data = await res.json();
-      // ✅ Delete ပြီးရင် cache invalidate — နောက် GET မှာ fresh data ရမည်
       cache = null;
       return NextResponse.json(data);
     }
 
     if (action === 'updateSupplier') {
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
-      // ✅ Supplier update ပြီးရင် cache invalidate
       cache = null;
       return NextResponse.json(data);
     }
 
+    // ── send: GAS သို့ item သိမ်း (Telegram မပါ) ──
     if (action === 'send') {
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body.data),
-      });
+      const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body.data) });
       const data = await res.json();
+      cache = null;
+      return NextResponse.json(data);
+    }
 
-      // ✅ Submit ပြီးရင် cache invalidate — dashboard refresh လုပ်ရင် data အသစ်ရမည်
+    // ── sendVoucher: items အကုန် save ပြီးမှ Telegram တစ်ကြောင်းတည်း ──
+    if (action === 'sendVoucher') {
+      const items: any[] = body.items || [];
+
+      // GAS သို့ items အကုန် save
+      for (const item of items) {
+        await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
+      }
       cache = null;
 
-      // Telegram notification
-      if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-        const item = body.data;
-        const isCashIn = item.type?.trim().toLowerCase() === 'cash in';
-        const amount = isCashIn
-          ? (parseFloat(item.income) || parseFloat(item.cost_total) || 0)
-          : (parseFloat(item.cost_total) || 0);
-        const msg = `🚨 *NEW TRANSACTION*\n\n👤 *By:* ${item.entered_by}\n💳 *Account:* ${item.account}\n📈 *Type:* ${item.type}\n🧾 *Item:* ${item.item_description}\n💰 *Amount:* ${amount.toLocaleString()} MMK`;
-        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'Markdown' }),
-        }).catch(() => {});
-      }
+      const first = items[0];
+      console.log('[sendVoucher] type:', first?.type);
 
-      return NextResponse.json(data);
+      let telegramResult = 'skipped';
+        if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID && items.length > 0) {
+          const isCashIn = first.type?.trim().toLowerCase() === 'cash in';
+          const emoji = isCashIn ? '📥' : '📤';
+          const grandTotal = items.reduce((s: number, i: any) => s + (parseFloat(i.cost_total) || 0), 0);
+
+          const itemLines = items.map((i: any, idx: number) => {
+            const subs = [i.sub1, i.sub2, i.sub3, i.sub4, i.sub5].filter(Boolean).join(' › ');
+            const cat = subs ? `${i.category} › ${subs}` : (i.category || '—');
+            return `${idx + 1}. ${i.item_description} — ${parseFloat(i.cost_total).toLocaleString()} MMK\n    📂 ${cat}`;
+          }).join('\n');
+
+          let totalIn = 0, totalOut = 0;
+          try {
+            const gasData = await fetchFromGAS();
+            (gasData.vouchers || []).forEach((v: any) => {
+              if ((v.type || '').trim().toLowerCase() === 'cash in')
+                totalIn += Math.round(Number(v.income || v['cost_(total)'] || v.cost_total || 0));
+              else
+                totalOut += Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
+            });
+          } catch { /* silent */ }
+
+          const balance = totalIn - totalOut;
+          const msg = [
+            `${emoji} *${first.type?.toUpperCase()} — ${first.voucherno || ''}*`,
+            `👤 ${first.entered_by}  |  💳 ${first.account}  |  📅 ${first.date}`,
+            `🏷️ ${first.vendor || '—'}`,
+            ``,
+            itemLines,
+            ``,
+            `💵 *Total: ${grandTotal.toLocaleString()} MMK*`,
+            `${'─'.repeat(24)}`,
+            `📈 In:  ${totalIn.toLocaleString()} MMK`,
+            `📉 Out: ${totalOut.toLocaleString()} MMK`,
+            `${balance >= 0 ? '🟢' : '🔴'} Bal: ${balance.toLocaleString()} MMK`,
+            balance < 0 ? `⚠️ *BALANCE NEGATIVE!*` : '',
+          ].filter(Boolean).join('\n');
+
+          try {
+            const tRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: msg, parse_mode: 'Markdown' }),
+            });
+            const tData = await tRes.json();
+            telegramResult = tData.ok ? 'sent' : `failed: ${JSON.stringify(tData)}`;
+          } catch (e: any) {
+            telegramResult = `error: ${e.message}`;
+          }
+        }
+
+        return NextResponse.json({ result: 'ok', telegram: telegramResult });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

@@ -82,8 +82,10 @@ export default function VehiclesPage() {
     const fuelKm   = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL'&&r.km>0).sort((a,b)=>a.km-b.km);
     const anyKm    = vrows.filter(r=>r.km>0).sort((a,b)=>a.km-b.km);
     const latestKm = anyKm.length>0 ? anyKm[anyKm.length-1].km : 0;
-    // Starting KM — Config မှာ သတ်မှတ်ထားတာ၊ မရှိရင် voucher ထဲ အနည်းဆုံး km သုံး
-    const startKm  = vehicleStartKm[vname] || (anyKm.length>0 ? anyKm[0].km : 0);
+    // Starting KM — Config key နဲ့ vname match လုပ်တဲ့အခါ space normalize လုပ်
+    const normalizeKey = (s: string) => s.replace(/\s+/g, '').toUpperCase();
+    const startKmEntry = Object.entries(vehicleStartKm).find(([k]) => normalizeKey(k) === normalizeKey(vname));
+    const startKm  = startKmEntry ? startKmEntry[1] : (anyKm.length>0 ? anyKm[0].km : 0);
     // Total KM — latest odometer − starting km
     const totalKm  = latestKm > startKm ? latestKm - startKm : 0;
     const fuelTotal = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL').reduce((s,r)=>s+r.amount,0);

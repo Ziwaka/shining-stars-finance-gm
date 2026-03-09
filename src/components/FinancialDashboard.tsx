@@ -31,7 +31,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
   const toggleCat = (key: string) => setOpenCats(p => ({...p, [key]: !p[key]}));
 
   const applyPreset = (preset: string) => { setFilter(f=>({...f,...getPresetDates(preset)})); setActivePreset(preset); };
-  const clearFilter = () => { setFilter({startDate:'',endDate:'',category:'',subCategory:'',vendor:'',item:''}); setActivePreset(''); };
+  const clearFilter = () => { setFilter({startDate:'',endDate:'',category:'',subCategory:'',vendor:'',item:'',enteredBy:''}); setActivePreset(''); };
   const handleRefresh = async () => {
     if (!onRefresh||isRefreshing) return;
     setIsRefreshing(true); await onRefresh(); setTimeout(()=>setIsRefreshing(false),1000);
@@ -70,11 +70,12 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
     normalizedData.filter(v=>!filter.category||v.category===filter.category).forEach(v=>{[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].filter(Boolean).forEach(x=>s.add(x));});
     return Array.from(s).filter(Boolean).sort();
   },[normalizedData,filter.category]);
-  const vendorOptions = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.vendor))).filter(Boolean).sort(),[normalizedData]);
+  const vendorOptions    = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.vendor))).filter(Boolean).sort(),[normalizedData]);
+  const enteredByOptions = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.entered_by))).filter(Boolean).sort(),[normalizedData]);
 
   const filtered = useMemo(()=>normalizedData.filter(v=>{
     const inDate=(!filter.startDate||v.date>=filter.startDate)&&(!filter.endDate||v.date<=filter.endDate);
-    return inDate&&(!filter.category||v.category===filter.category)&&(!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))&&(!filter.vendor||v.vendor===filter.vendor)&&(!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
+    return inDate&&(!filter.category||v.category===filter.category)&&(!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))&&(!filter.vendor||v.vendor===filter.vendor)&&(!filter.enteredBy||v.entered_by===filter.enteredBy)&&(!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
   }),[normalizedData,filter]);
 
   const analytics = useMemo(()=>{
@@ -204,6 +205,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
           <FSelect label="CATEGORY"     value={filter.category}    options={categoryOptions}    onChange={(v:string)=>setFilter({...filter,category:v,subCategory:''})}/>
           <FSelect label="SUB-CATEGORY" value={filter.subCategory} options={subCategoryOptions} onChange={(v:string)=>setFilter({...filter,subCategory:v})}/>
           <FSelect label="VENDOR"       value={filter.vendor}      options={vendorOptions}      onChange={(v:string)=>setFilter({...filter,vendor:v})}/>
+          <FSelect label="BY"           value={filter.enteredBy}   options={enteredByOptions}   onChange={(v:string)=>setFilter({...filter,enteredBy:v})}/>
           <input type="text" placeholder="ITEM ..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] outline-none font-black text-slate-950 uppercase"
             value={filter.item} onChange={e=>setFilter({...filter,item:e.target.value})}/>
         </div>

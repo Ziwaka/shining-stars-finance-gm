@@ -177,6 +177,21 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setImage('');
   };
 
+  const loadConfig = (force = false) => fetch('/api/gas?t=' + Date.now() + (force ? '&force=1' : ''))
+    .then(res => res.json())
+    .then(data => {
+      setConfig({
+        categoryList: data.categoryList || data.tree || [],
+        prefixes: data.prefixes || {},
+        lastSerials: data.lastSerials || {},
+        suppliers: data.suppliers || [],
+        recentItems: data.recentItems || [],
+        users: data.users || [],
+        accounts: data.accounts || [],
+      });
+    })
+    .catch(err => console.error('Failed to fetch config:', err));
+
   const handleFinalSubmit = async () => {
     if (itemList.length === 0 || submitStatus === 'processing') return;
     setSubmitStatus('processing');
@@ -190,7 +205,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       setItemList([]);
       setVoucherno('');
       onRefresh();
-      // ✅ success မှာ ရပ်ထား — NEW VOUCHER နှိပ်မှ resetForm သွားမည်
+      // ✅ force=true — cache bypass ဖြင့် fresh lastSerials ရမည်
+      await loadConfig(true);
     } catch {
       setSubmitStatus('error');
       setTimeout(() => setSubmitStatus('idle'), 3000);

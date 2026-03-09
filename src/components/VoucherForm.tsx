@@ -219,13 +219,13 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           <div className="h-6 w-[2px] bg-slate-300"/>
           <div className="flex items-center gap-2 px-2">
             <User size={16} className="text-slate-500"/>
-            <select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={enteredBy} onChange={e => setEnteredBy(e.target.value)}>
+            <select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={enteredBy} onChange={e => { setEnteredBy(e.target.value); if (submitStatus === 'success') setSubmitStatus('idle'); }}>
               {config.users?.map((u: any, i: number) => <option key={i} value={String(u)}>{String(u)}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2 px-2 border-l-2 border-slate-300 pl-4">
             <Wallet size={16} className="text-slate-500"/>
-            <select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={account} onChange={e => setAccount(e.target.value)}>
+            <select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={account} onChange={e => { setAccount(e.target.value); if (submitStatus === 'success') setSubmitStatus('idle'); }}>
               {config.accounts?.map((a: any, i: number) => <option key={i} value={String(a)}>{String(a)}</option>)}
             </select>
           </div>
@@ -507,12 +507,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             <span className="text-slate-600 text-[10px] tracking-widest">TOTAL</span>
             <span className="text-slate-950 text-4xl font-black">{itemList.reduce((s, x) => s + x.cost_total, 0).toLocaleString()}</span>
           </div>
-          <button onClick={handleFinalSubmit} disabled={submitStatus === 'processing' || submitStatus === 'success'}
-            className={`w-full py-5 rounded-2xl text-xs transition-all flex items-center justify-center font-black ${submitStatus === 'idle' ? 'bg-slate-950 text-white shadow-md hover:bg-slate-800' : submitStatus === 'processing' ? 'bg-slate-300 text-slate-950' : submitStatus === 'success' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-rose-100 text-rose-900 border border-rose-300'}`}>
-            {submitStatus === 'idle' && <><Save className="mr-2" size={18} strokeWidth={3}/> POST TO CLOUD</>}
+          <button onClick={handleFinalSubmit} disabled={submitStatus === 'processing' || itemList.length === 0}
+            className={`w-full py-5 rounded-2xl text-xs transition-all flex items-center justify-center font-black ${submitStatus === 'idle' || submitStatus === 'success' ? 'bg-slate-950 text-white shadow-md hover:bg-slate-800' : submitStatus === 'processing' ? 'bg-slate-300 text-slate-950' : 'bg-rose-100 text-rose-900 border border-rose-300'}`}>
             {submitStatus === 'processing' && <><RefreshCcw className="mr-2 animate-spin" size={18} strokeWidth={3}/> PROCESSING...</>}
-            {submitStatus === 'success' && <><CheckCircle className="mr-2" size={18} strokeWidth={3}/> SUCCESSFUL</>}
-            {submitStatus === 'error' && <><AlertTriangle className="mr-2" size={18} strokeWidth={3}/> ERROR</>}
+            {submitStatus !== 'processing' && <><Save className="mr-2" size={18} strokeWidth={3}/> POST TO CLOUD</>}
           </button>
           {submitStatus === 'success' && (
             <button onClick={resetForm} className="w-full py-4 rounded-2xl text-xs bg-white border-2 border-slate-950 text-slate-950 hover:bg-slate-950 hover:text-white transition-all flex items-center justify-center font-black gap-2">

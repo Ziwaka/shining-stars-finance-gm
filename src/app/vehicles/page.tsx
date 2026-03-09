@@ -74,12 +74,18 @@ export default function VehiclesPage() {
     vrows.forEach(r => { const t=getExpenseType(r.subs,r.category); byType[t]=(byType[t]||0)+r.amount; });
     const byMonth: Record<string,number> = {};
     vrows.forEach(r => { byMonth[r.month]=(byMonth[r.month]||0)+r.amount; });
-    const fuelKm  = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL'&&r.km>0).sort((a,b)=>b.km-a.km);
-    const latestKm = fuelKm[0]?.km||0, oldestKm=fuelKm[fuelKm.length-1]?.km||0;
-    const totalKm  = fuelKm.length>=2 ? latestKm-oldestKm : 0;
-    const costPerKm = totalKm>0 ? total/totalKm : 0;
+    const fuelKm   = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL'&&r.km>0).sort((a,b)=>a.km-b.km);
+    const anyKm    = vrows.filter(r=>r.km>0).sort((a,b)=>a.km-b.km);
+    const latestKm = anyKm.length>0 ? anyKm[anyKm.length-1].km : 0;
+    const oldestKm = anyKm.length>0 ? anyKm[0].km : 0;
+    // totalKm — entry ၁ ခုရှိရင် တစ်ခုတည်းကို ပြ၊ ၂ ခုရှိရင် diff တွက်
+    const totalKm  = anyKm.length>=2 ? latestKm-oldestKm : latestKm;
+    const fuelTotal = vrows.filter(r=>getExpenseType(r.subs,r.category)==='FUEL').reduce((s,r)=>s+r.amount,0);
+    // Cost/KM ၂ မျိုး
+    const fuelCostPerKm  = totalKm>0 ? fuelTotal/totalKm : 0;   // ဆီကုန်ကျ / km
+    const totalCostPerKm = totalKm>0 ? total/totalKm : 0;        // စုစုပေါင်းကုန်ကျ / km
     const logs = [...vrows].sort((a,b)=>b.date.localeCompare(a.date));
-    return { name:vname, total, byType, byMonth, latestKm, totalKm, costPerKm, logs };
+    return { name:vname, total, byType, byMonth, latestKm, totalKm, fuelCostPerKm, totalCostPerKm, logs };
   }), [vehicleNames, rows]);
 
   const grandTotal = vehicleData.reduce((s,v)=>s+v.total,0);
@@ -204,14 +210,15 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* ── KM stats ── */}
-                  {(vd.latestKm>0||vd.costPerKm>0) && (
-                    <div className="grid grid-cols-3 divide-x divide-slate-100 border-t border-slate-100">
+                  {(vd.latestKm>0||vd.totalCostPerKm>0) && (
+                    <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-100">
                       {[
-                        {label:'Total KM',  value:vd.totalKm>0   ? fmt(vd.totalKm)              : '—', unit:'km'},
-                        {label:'Cost/KM',   value:vd.costPerKm>0 ? fmt(Math.round(vd.costPerKm)) : '—', unit:'MMK'},
-                        {label:'Odometer',  value:vd.latestKm>0  ? fmt(vd.latestKm)             : '—', unit:'km'},
+                        {label:'Total KM',      value:vd.totalKm>0         ? fmt(vd.totalKm)                    : '—', unit:'km'},
+                        {label:'Odometer',      value:vd.latestKm>0        ? fmt(vd.latestKm)                   : '—', unit:'km'},
+                        {label:'ဆီကုန်/KM',     value:vd.fuelCostPerKm>0   ? fmt(Math.round(vd.fuelCostPerKm))  : '—', unit:'MMK/km'},
+                        {label:'စုစုပေါင်း/KM', value:vd.totalCostPerKm>0  ? fmt(Math.round(vd.totalCostPerKm)) : '—', unit:'MMK/km'},
                       ].map((k,i)=>(
-                        <div key={i} className="px-2 py-2 text-center">
+                        <div key={i} className="bg-slate-50 rounded-xl px-3 py-2 text-center border border-slate-100">
                           <p className="text-[9px] text-slate-400 uppercase font-black">{k.label}</p>
                           <p className="text-sm font-black mt-0.5">{k.value}</p>
                           <p className="text-[9px] text-slate-400">{k.unit}</p>

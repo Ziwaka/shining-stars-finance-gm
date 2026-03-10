@@ -10,6 +10,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('SYSTEM - INITIALIZING');
   const [vouchers, setVouchers] = useState<any[]>([]);
+  const [dashboardDefaults, setDashboardDefaults] = useState<Record<string,string>>({});
   const [dataLoading, setDataLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
 
@@ -22,6 +23,7 @@ export default function Home() {
       clearTimeout(timeout);
       const data = await res.json();
       setVouchers(data.vouchers || []);
+      if (data.dashboardDefaults) setDashboardDefaults(data.dashboardDefaults);
     } catch (err) {
       console.error("Data Fetch Error", err);
     } finally {
@@ -169,7 +171,7 @@ export default function Home() {
               <p className="text-[10px] tracking-[0.3em] text-slate-400 font-black">LOADING FINANCIAL DATA...</p>
             </div>
           ) : (
-            <FinancialDashboard vouchers={vouchers} onRefresh={fetchVouchers} />
+            <FinancialDashboard vouchers={vouchers} onRefresh={fetchVouchers} dashboardDefaults={dashboardDefaults} />
           )}
         </section>
 

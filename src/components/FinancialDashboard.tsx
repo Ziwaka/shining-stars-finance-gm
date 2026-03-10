@@ -20,8 +20,21 @@ function getPresetDates(preset: string) {
   return { startDate:'', endDate:'' };
 }
 
-export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouchers: any[], onRefresh?: () => void }) {
-  const [filter, setFilter]           = useState({ startDate:'', endDate:'', category:'', subCategory:'', vendor:'', item:'', enteredBy:'' });
+export default function FinancialDashboard({ vouchers = [], onRefresh, dashboardDefaults = {} }: { vouchers: any[], onRefresh?: () => void, dashboardDefaults?: Record<string,string> }) {
+  const [filter, setFilter] = useState({ startDate:'', endDate:'', category:'', subCategory:'', vendor:'', item:'', enteredBy:'', account:'' });
+
+  // dashboardDefaults ပါလာတဲ့အခါ auto-apply (တစ်ကြိမ်သာ)
+  const defaultsApplied = React.useRef(false);
+  React.useEffect(()=>{
+    if(defaultsApplied.current) return;
+    if(Object.keys(dashboardDefaults).length===0) return;
+    defaultsApplied.current = true;
+    setFilter(f=>({
+      ...f,
+      ...(dashboardDefaults.account   ? { account:   dashboardDefaults.account }   : {}),
+      ...(dashboardDefaults.enteredBy ? { enteredBy: dashboardDefaults.enteredBy } : {}),
+    }));
+  },[dashboardDefaults]);
   const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });
@@ -31,7 +44,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
   const toggleCat = (key: string) => setOpenCats(p => ({...p, [key]: !p[key]}));
 
   const applyPreset = (preset: string) => { setFilter(f=>({...f,...getPresetDates(preset)})); setActivePreset(preset); };
-  const clearFilter = () => { setFilter({startDate:'',endDate:'',category:'',subCategory:'',vendor:'',item:'',enteredBy:''}); setActivePreset(''); };
+  const clearFilter = () => { setFilter({startDate:'',endDate:'',category:'',subCategory:'',vendor:'',item:'',enteredBy:'',account:''}); setActivePreset(''); };
   const handleRefresh = async () => {
     if (!onRefresh||isRefreshing) return;
     setIsRefreshing(true); await onRefresh(); setTimeout(()=>setIsRefreshing(false),1000);
@@ -72,10 +85,11 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
   },[normalizedData,filter.category]);
   const vendorOptions    = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.vendor))).filter(Boolean).sort(),[normalizedData]);
   const enteredByOptions = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.entered_by))).filter(Boolean).sort(),[normalizedData]);
+  const accountOptions   = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.account))).filter(Boolean).sort(),[normalizedData]);
 
   const filtered = useMemo(()=>normalizedData.filter(v=>{
     const inDate=(!filter.startDate||v.date>=filter.startDate)&&(!filter.endDate||v.date<=filter.endDate);
-    return inDate&&(!filter.category||v.category===filter.category)&&(!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))&&(!filter.vendor||v.vendor===filter.vendor)&&(!filter.enteredBy||v.entered_by===filter.enteredBy)&&(!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
+    return inDate&&(!filter.category||v.category===filter.category)&&(!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))&&(!filter.vendor||v.vendor===filter.vendor)&&(!filter.enteredBy||v.entered_by===filter.enteredBy)&&(!filter.account||v.account===filter.account)&&(!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
   }),[normalizedData,filter]);
 
   const analytics = useMemo(()=>{
@@ -208,6 +222,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh }: { vouch
           <FSelect label="SUB-CATEGORY" value={filter.subCategory} options={subCategoryOptions} onChange={(v:string)=>setFilter({...filter,subCategory:v})}/>
           <FSelect label="VENDOR"       value={filter.vendor}      options={vendorOptions}      onChange={(v:string)=>setFilter({...filter,vendor:v})}/>
           <FSelect label="BY"           value={filter.enteredBy}   options={enteredByOptions}   onChange={(v:string)=>setFilter({...filter,enteredBy:v})}/>
+          <FSelect label="ACCOUNT"      value={filter.account}     options={accountOptions}     onChange={(v:string)=>setFilter({...filter,account:v})}/>
           <input type="text" placeholder="ITEM ..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] outline-none font-black text-slate-950 uppercase"
             value={filter.item} onChange={e=>setFilter({...filter,item:e.target.value})}/>
         </div>

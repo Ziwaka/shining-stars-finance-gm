@@ -42,6 +42,9 @@ function autoCrop(imageData: ImageData): {top:number;bottom:number;left:number;r
   return {top:Math.max(0,top-m),bottom:Math.min(height,bottom+m),left:Math.max(0,left-m),right:Math.min(width,right+m)};
 }
 
+/* ─── CLAMP ─────────────────────────────────────────────────── */
+const clamp = (v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
+
 /* ─── PROCESS PIPELINE ──────────────────────────────────────── */
 function processImagePipeline(src: string, onDone: (r:string)=>void) {
   const img=new Image();
@@ -95,12 +98,17 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const itemRef = useRef<HTMLDivElement>(null);
 
   // ── Scanner states ──
-  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraActive, setCameraActive]     = useState(false);
   const [scanProcessing, setScanProcessing] = useState(false);
-  const [scanProgress, setScanProgress] = useState('');
-  const streamRef = useRef<MediaStream | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [scanProgress, setScanProgress]     = useState('');
+  const [cropMode, setCropMode]             = useState(false);
+  const [rawSrc, setRawSrc]                 = useState('');
+  const [cropRect, setCropRect]             = useState({ x:0.05, y:0.05, w:0.9, h:0.9 });
+  const streamRef   = useRef<MediaStream | null>(null);
+  const videoRef    = useRef<HTMLVideoElement>(null);
   const scanFileRef = useRef<HTMLInputElement>(null);
+  const cropImgRef  = useRef<HTMLImageElement>(null);
+  const dragState   = useRef<{handle:string;startX:number;startY:number;startRect:typeof cropRect}|null>(null);
 
   useEffect(() => {
     fetch('/api/gas')
@@ -188,26 +196,93 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   // ── Scanner helpers ──
   const openCamera = async () => {
     try {
-      const ms = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } });
+      const ms = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:3840}, height:{ideal:2160} } });
       streamRef.current = ms; setCameraActive(true);
       requestAnimationFrame(() => { if (videoRef.current) { videoRef.current.srcObject = ms; videoRef.current.play(); } });
     } catch { scanFileRef.current?.click(); }
   };
-  const closeCamera = () => { streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null; setCameraActive(false); };
+  const closeCamera = () => { streamRef.current?.getTracks().forEach(t=>t.stop()); streamRef.current=null; setCameraActive(false); };
+
   const captureFrame = () => {
     const v = videoRef.current; if (!v) return;
-    const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
-    c.getContext('2d')!.drawImage(v, 0, 0); closeCamera(); runScanPipeline(c.toDataURL('image/jpeg', 0.95));
+    const c = document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
+    c.getContext('2d')!.drawImage(v,0,0); closeCamera();
+    openCropEditor(c.toDataURL('image/jpeg',0.95));
   };
-  const runScanPipeline = (src: string) => {
-    setScanProcessing(true); setScanProgress('📐 Edge Detection...');
-    setTimeout(() => { setScanProgress('✂️ Auto Crop...'); setTimeout(() => { setScanProgress('⚡ Enhancing...');
-      processImagePipeline(src, result => { setImage(result); setScanProcessing(false); setScanProgress(''); });
-    }, 300); }, 200);
+
+  // ── Open crop editor: auto-detect initial bounds ──
+  const openCropEditor = (src: string) => {
+    setRawSrc(src);
+    // Try auto-detect for initial suggestion
+    const img = new Image();
+    img.onload = () => {
+      const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+      const ctx=c.getContext('2d')!; ctx.drawImage(img,0,0);
+      const id=ctx.getImageData(0,0,c.width,c.height);
+      const b=autoCrop(id);
+      if(b){
+        setCropRect({
+          x: b.left/img.width, y: b.top/img.height,
+          w: (b.right-b.left)/img.width, h: (b.bottom-b.top)/img.height,
+        });
+      } else {
+        setCropRect({x:0.04, y:0.04, w:0.92, h:0.92});
+      }
+      setCropMode(true);
+    };
+    img.src=src;
   };
+
   const handleScanFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const reader = new FileReader(); reader.onload = ev => runScanPipeline(ev.target!.result as string); reader.readAsDataURL(file); e.target.value = '';
+    const file=e.target.files?.[0]; if(!file) return;
+    const reader=new FileReader(); reader.onload=ev=>openCropEditor(ev.target!.result as string); reader.readAsDataURL(file); e.target.value='';
+  };
+
+  // ── Crop drag logic (pointer events, works mouse+touch) ──
+  const onCropPointerDown = (e: React.PointerEvent, handle: string) => {
+    e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
+    dragState.current = { handle, startX:e.clientX, startY:e.clientY, startRect:{...cropRect} };
+  };
+  const onCropPointerMove = (e: React.PointerEvent) => {
+    const ds=dragState.current; if(!ds) return;
+    const el=cropImgRef.current; if(!el) return;
+    const { width:W, height:H }=el.getBoundingClientRect();
+    const dx=(e.clientX-ds.startX)/W, dy=(e.clientY-ds.startY)/H;
+    const MIN=0.05;
+    const r={...ds.startRect};
+    const { handle:h }=ds;
+    if(h==='move')          { r.x=clamp(r.x+dx,0,1-r.w); r.y=clamp(r.y+dy,0,1-r.h); }
+    if(h.includes('l'))     { const nx=clamp(r.x+dx,0,r.x+r.w-MIN); r.w+=r.x-nx; r.x=nx; }
+    if(h.includes('r'))     { r.w=clamp(r.w+dx,MIN,1-r.x); }
+    if(h.includes('t'))     { const ny=clamp(r.y+dy,0,r.y+r.h-MIN); r.h+=r.y-ny; r.y=ny; }
+    if(h.includes('b'))     { r.h=clamp(r.h+dy,MIN,1-r.y); }
+    setCropRect(r);
+  };
+  const onCropPointerUp = () => { dragState.current=null; };
+
+  // ── Apply crop then enhance ──
+  const applyCrop = () => {
+    setCropMode(false);
+    setScanProcessing(true); setScanProgress('✂️ Cropping...');
+    const img=new Image();
+    img.onload=()=>{
+      const cw=Math.round(img.width*cropRect.w), ch=Math.round(img.height*cropRect.h);
+      const cx=Math.round(img.width*cropRect.x),  cy=Math.round(img.height*cropRect.y);
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      c.getContext('2d')!.drawImage(img,cx,cy,cw,ch,0,0,cw,ch);
+      setScanProgress('⚡ Enhancing...');
+      setTimeout(()=>{
+        const ctx2=c.getContext('2d')!;
+        const id=autoEnhance(ctx2.getImageData(0,0,cw,ch));
+        ctx2.putImageData(id,0,0);
+        const MAX=1400, scale=Math.min(1,MAX/c.width,MAX/c.height);
+        let fc=c;
+        if(scale<1){ const rs=document.createElement('canvas'); rs.width=Math.round(c.width*scale); rs.height=Math.round(c.height*scale); rs.getContext('2d')!.drawImage(c,0,0,rs.width,rs.height); fc=rs; }
+        setImage(fc.toDataURL('image/jpeg',0.88));
+        setScanProcessing(false); setScanProgress('');
+      },200);
+    };
+    img.src=rawSrc;
   };
 
   const resetForm = () => {
@@ -289,7 +364,103 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   return (
     <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950">
 
-      {/* ── CAMERA FULLSCREEN ── */}
+      {/* ── CROP EDITOR ── */}
+      {cropMode && (
+        <div className="fixed inset-0 z-[300] bg-black flex flex-col select-none">
+          <div className="bg-black px-4 py-3 flex items-center justify-between border-b border-white/10">
+            <div>
+              <p className="text-white text-xs font-black tracking-widest uppercase">Manual Crop</p>
+              <p className="text-slate-400 text-[9px] mt-0.5">Corner & Edge ကိုဆွဲ၍ ဖြတ်ပါ</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={()=>{setCropMode(false); setRawSrc('');}}
+                className="text-slate-400 text-[10px] font-black px-3 py-1.5 border border-white/20 rounded-lg">CANCEL</button>
+              <button onClick={applyCrop}
+                className="bg-emerald-500 text-white text-[10px] font-black px-4 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg active:scale-95 transition-transform">
+                <Check size={12}/> CROP & ENHANCE
+              </button>
+            </div>
+          </div>
+
+          {/* Image + crop overlay */}
+          <div className="flex-1 overflow-hidden flex items-center justify-center p-3"
+            onPointerMove={onCropPointerMove} onPointerUp={onCropPointerUp} onPointerCancel={onCropPointerUp}>
+            <div className="relative inline-block" style={{maxWidth:'100%',maxHeight:'100%'}}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img ref={cropImgRef} src={rawSrc} alt="crop" draggable={false}
+                style={{display:'block',maxWidth:'calc(100vw - 24px)',maxHeight:'calc(100vh - 130px)',userSelect:'none'}}/>
+
+              {/* Dark overlay — clip out crop window */}
+              <div className="absolute inset-0 pointer-events-none" style={{
+                background:`linear-gradient(rgba(0,0,0,0.6),rgba(0,0,0,0.6))`,
+                clipPath:`polygon(
+                  0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
+                  ${cropRect.x*100}% ${cropRect.y*100}%,
+                  ${cropRect.x*100}% ${(cropRect.y+cropRect.h)*100}%,
+                  ${(cropRect.x+cropRect.w)*100}% ${(cropRect.y+cropRect.h)*100}%,
+                  ${(cropRect.x+cropRect.w)*100}% ${cropRect.y*100}%,
+                  ${cropRect.x*100}% ${cropRect.y*100}%
+                )`,
+              }}/>
+
+              {/* Crop border */}
+              <div className="absolute pointer-events-none" style={{
+                left:`${cropRect.x*100}%`, top:`${cropRect.y*100}%`,
+                width:`${cropRect.w*100}%`, height:`${cropRect.h*100}%`,
+                border:'2px solid #34d399', boxSizing:'border-box',
+              }}>
+                {/* Rule-of-thirds grid */}
+                {[1/3,2/3].map(p=>(
+                  <React.Fragment key={p}>
+                    <div style={{position:'absolute',left:`${p*100}%`,top:0,bottom:0,width:1,background:'rgba(52,211,153,0.25)'}}/>
+                    <div style={{position:'absolute',top:`${p*100}%`,left:0,right:0,height:1,background:'rgba(52,211,153,0.25)'}}/>
+                  </React.Fragment>
+                ))}
+              </div>
+
+              {/* Move handle (center) */}
+              <div onPointerDown={e=>onCropPointerDown(e,'move')}
+                className="absolute cursor-move"
+                style={{left:`${cropRect.x*100}%`,top:`${cropRect.y*100}%`,width:`${cropRect.w*100}%`,height:`${cropRect.h*100}%`}}/>
+
+              {/* Corner & edge handles */}
+              {[
+                {h:'tl', cx:cropRect.x,          cy:cropRect.y,          cursor:'nwse-resize'},
+                {h:'tr', cx:cropRect.x+cropRect.w, cy:cropRect.y,         cursor:'nesw-resize'},
+                {h:'bl', cx:cropRect.x,          cy:cropRect.y+cropRect.h, cursor:'nesw-resize'},
+                {h:'br', cx:cropRect.x+cropRect.w, cy:cropRect.y+cropRect.h,cursor:'nwse-resize'},
+                {h:'t',  cx:cropRect.x+cropRect.w/2, cy:cropRect.y,       cursor:'ns-resize'},
+                {h:'b',  cx:cropRect.x+cropRect.w/2, cy:cropRect.y+cropRect.h, cursor:'ns-resize'},
+                {h:'l',  cx:cropRect.x,           cy:cropRect.y+cropRect.h/2, cursor:'ew-resize'},
+                {h:'r',  cx:cropRect.x+cropRect.w, cy:cropRect.y+cropRect.h/2, cursor:'ew-resize'},
+              ].map(({h,cx,cy,cursor})=>(
+                <div key={h} onPointerDown={e=>onCropPointerDown(e,h)}
+                  style={{
+                    position:'absolute', cursor,
+                    left:`calc(${cx*100}% - 14px)`, top:`calc(${cy*100}% - 14px)`,
+                    width:28, height:28, zIndex:10,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                  }}>
+                  <div style={{
+                    width: h.length===2?14:10, height: h.length===2?14:10,
+                    background:'#34d399', border:'2px solid white',
+                    borderRadius: h.length===2?3:2,
+                    boxShadow:'0 2px 8px rgba(0,0,0,0.5)',
+                  }}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Hint bar */}
+          <div className="bg-black border-t border-white/10 px-4 py-2.5 flex items-center justify-center gap-2">
+            <ScanLine size={12} className="text-emerald-400"/>
+            <span className="text-slate-400 text-[10px] font-black">
+              Auto-detect ဖြင့် Initial Frame ထားပြီး — ကိုယ်တိုင် ပြန်ညှိနိုင်သည်
+            </span>
+          </div>
+        </div>
+      )}
       {cameraActive && (
         <div className="fixed inset-0 z-[300] bg-black flex flex-col">
           <div className="relative flex-1 overflow-hidden">
@@ -599,9 +770,19 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                     <img src={image} className="w-full max-h-52 object-contain"/>
                     <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[9px] font-black px-2 py-1 rounded-full flex items-center gap-1 shadow"><Check size={9}/> SCANNED & ENHANCED</div>
                     <div className="absolute top-2 right-2 flex gap-1.5">
-                      <button onClick={() => { setImage(''); openCamera(); }} className="bg-blue-100 text-blue-600 border border-blue-200 p-1.5 rounded-full shadow-sm"><Camera size={12}/></button>
-                      <button onClick={() => scanFileRef.current?.click()} className="bg-amber-100 text-amber-600 border border-amber-200 p-1.5 rounded-full shadow-sm"><RotateCcw size={12}/></button>
-                      <button onClick={() => setImage('')} className="bg-rose-100 text-rose-600 border border-rose-200 p-1.5 rounded-full shadow-sm"><Trash2 size={12}/></button>
+                      {/* Re-crop: rawSrc ရှိရင် crop editor ပြန်ဖွင့် */}
+                      {rawSrc && (
+                        <button onClick={()=>setCropMode(true)} title="Crop ပြန်လုပ်"
+                          className="bg-violet-100 text-violet-600 border border-violet-200 p-1.5 rounded-full shadow-sm">
+                          <ScanLine size={12}/>
+                        </button>
+                      )}
+                      <button onClick={() => { setImage(''); openCamera(); }} title="Camera ထပ်ရိုက်"
+                        className="bg-blue-100 text-blue-600 border border-blue-200 p-1.5 rounded-full shadow-sm"><Camera size={12}/></button>
+                      <button onClick={() => scanFileRef.current?.click()} title="Gallery မှရွေး"
+                        className="bg-amber-100 text-amber-600 border border-amber-200 p-1.5 rounded-full shadow-sm"><RotateCcw size={12}/></button>
+                      <button onClick={() => { setImage(''); setRawSrc(''); }} title="ဖျက်"
+                        className="bg-rose-100 text-rose-600 border border-rose-200 p-1.5 rounded-full shadow-sm"><Trash2 size={12}/></button>
                     </div>
                   </>
                 )}

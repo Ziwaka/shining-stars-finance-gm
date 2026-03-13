@@ -76,20 +76,17 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const enteredByOptions = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.entered_by))).filter(Boolean).sort(),[normalizedData]);
   const accountOptions   = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.account))).filter(Boolean).sort(),[normalizedData]);
 
-  // Default filter: dashboardDefaults ပါလာရင် သုံး၊ မပါရင် KTS account auto-detect
+  // Default filter: KTS account auto-detect — accountOptions ပြည့်မှသာ run
   React.useEffect(()=>{
     if(defaultsApplied.current) return;
-    if(accountOptions.length === 0 && Object.keys(dashboardDefaults).length === 0) return;
+    if(accountOptions.length === 0) return;          // accountOptions မပြည့်သေးရင် စောင့်
     defaultsApplied.current = true;
-    const kts = !dashboardDefaults.account
-      ? accountOptions.find(a => a.toLowerCase().includes('kts'))
-      : null;
-    setFilter(f=>({
-      ...f,
-      account: dashboardDefaults.account || kts || f.account,
+    const kts = accountOptions.find(a => a.toLowerCase().includes('kts'));
+    const acc = dashboardDefaults.account || kts || '';
+    if(acc) setFilter(f=>({ ...f, account: acc,
       ...(dashboardDefaults.enteredBy ? { enteredBy: dashboardDefaults.enteredBy } : {}),
     }));
-  },[dashboardDefaults, accountOptions]);
+  },[accountOptions, dashboardDefaults]);
 
   const filtered = useMemo(()=>normalizedData.filter(v=>{
     const inDate=(!filter.startDate||v.date>=filter.startDate)&&(!filter.endDate||v.date<=filter.endDate);

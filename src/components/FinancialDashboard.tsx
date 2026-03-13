@@ -35,6 +35,19 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
       ...(dashboardDefaults.enteredBy ? { enteredBy: dashboardDefaults.enteredBy } : {}),
     }));
   },[dashboardDefaults]);
+
+  // KTS account auto-default — API defaults မပါလာရင် voucher data မှ ရှာ
+  const ktsApplied = React.useRef(false);
+  React.useEffect(()=>{
+    if(ktsApplied.current) return;
+    if(accountOptions.length === 0) return;
+    ktsApplied.current = true;
+    // dashboardDefaults မှ account မပါမှ auto-detect
+    if(!dashboardDefaults.account){
+      const kts = accountOptions.find(a => a.toLowerCase().includes('kts'));
+      if(kts) setFilter(f => ({ ...f, account: kts }));
+    }
+  },[accountOptions, dashboardDefaults.account]);
   const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });

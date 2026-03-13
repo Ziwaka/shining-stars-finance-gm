@@ -1,6 +1,63 @@
 "use client"
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Trash2, Save, RefreshCcw, Camera, ArrowUpRight, ArrowDownLeft, CheckCircle, AlertTriangle, MessageSquare, Hash, Banknote, Search, User, Wallet, BellRing, Phone, MapPin, Briefcase, X } from 'lucide-react';
+import { Plus, Trash2, Save, RefreshCcw, Camera, Upload, ScanLine, Zap, RotateCcw, ArrowUpRight, ArrowDownLeft, MessageSquare, Hash, Banknote, Search, User, Wallet, BellRing, Phone, MapPin, Briefcase, X, Check } from 'lucide-react';
+
+/* ─── AUTO ENHANCE ─────────────────────────────────────────── */
+function autoEnhance(src: ImageData): ImageData {
+  const d = new Uint8ClampedArray(src.data);
+  const minC = [255, 255, 255], maxC = [0, 0, 0];
+  for (let i = 0; i < d.length; i += 4)
+    for (let c = 0; c < 3; c++) { if (d[i+c] < minC[c]) minC[c]=d[i+c]; if (d[i+c] > maxC[c]) maxC[c]=d[i+c]; }
+  for (let i = 0; i < d.length; i += 4)
+    for (let c = 0; c < 3; c++) {
+      let v = ((d[i+c]-minC[c])/(maxC[c]-minC[c]||1))*255;
+      v = 128 + (v-128)*1.25;
+      d[i+c] = Math.max(0,Math.min(255,v));
+    }
+  const {width,height}=src, blur=new Float32Array(width*height*4);
+  const k=[1/16,2/16,1/16,2/16,4/16,2/16,1/16,2/16,1/16];
+  for (let y=1;y<height-1;y++) for (let x=1;x<width-1;x++) {
+    const base=(y*width+x)*4; let ki=0;
+    for (let c=0;c<3;c++) { let s=0; ki=0; for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) s+=d[((y+dy)*width+(x+dx))*4+c]*k[ki++]; blur[base+c]=s; }
+  }
+  for (let i=0;i<d.length;i+=4) for (let c=0;c<3;c++) d[i+c]=Math.max(0,Math.min(255,d[i+c]+0.6*(d[i+c]-blur[i+c])));
+  return new ImageData(d,width,height);
+}
+
+/* ─── AUTO CROP ─────────────────────────────────────────────── */
+function autoCrop(imageData: ImageData): {top:number;bottom:number;left:number;right:number}|null {
+  const {data,width,height}=imageData;
+  const gray=new Float32Array(width*height);
+  for (let i=0;i<width*height;i++) gray[i]=0.299*data[i*4]+0.587*data[i*4+1]+0.114*data[i*4+2];
+  const edges=new Float32Array(width*height); let maxE=0;
+  for (let y=1;y<height-1;y++) for (let x=1;x<width-1;x++) {
+    const gx=-gray[(y-1)*width+(x-1)]-2*gray[y*width+(x-1)]-gray[(y+1)*width+(x-1)]+gray[(y-1)*width+(x+1)]+2*gray[y*width+(x+1)]+gray[(y+1)*width+(x+1)];
+    const gy=-gray[(y-1)*width+(x-1)]-2*gray[(y-1)*width+x]-gray[(y-1)*width+(x+1)]+gray[(y+1)*width+(x-1)]+2*gray[(y+1)*width+x]+gray[(y+1)*width+(x+1)];
+    const e=Math.sqrt(gx*gx+gy*gy); edges[y*width+x]=e; if(e>maxE)maxE=e;
+  }
+  const thr=maxE*0.08; let top=height,bottom=0,left=width,right=0;
+  for (let y=0;y<height;y++) for (let x=0;x<width;x++) if(edges[y*width+x]>thr) { if(y<top)top=y; if(y>bottom)bottom=y; if(x<left)left=x; if(x>right)right=x; }
+  if (right-left<width*0.2||bottom-top<height*0.2) return null;
+  const m=Math.round(Math.min(width,height)*0.025);
+  return {top:Math.max(0,top-m),bottom:Math.min(height,bottom+m),left:Math.max(0,left-m),right:Math.min(width,right+m)};
+}
+
+/* ─── PROCESS PIPELINE ──────────────────────────────────────── */
+function processImagePipeline(src: string, onDone: (r:string)=>void) {
+  const img=new Image();
+  img.onload=()=>{
+    const rc=document.createElement('canvas'); rc.width=img.width; rc.height=img.height;
+    const rctx=rc.getContext('2d')!; rctx.drawImage(img,0,0);
+    let id=autoEnhance(rctx.getImageData(0,0,rc.width,rc.height));
+    rctx.putImageData(id,0,0);
+    const b=autoCrop(id); let fc=rc;
+    if(b){const cw=b.right-b.left,ch=b.bottom-b.top; fc=document.createElement('canvas'); fc.width=cw; fc.height=ch; fc.getContext('2d')!.drawImage(rc,b.left,b.top,cw,ch,0,0,cw,ch);}
+    const MAX=1400, scale=Math.min(1,MAX/fc.width,MAX/fc.height);
+    if(scale<1){const rs=document.createElement('canvas'); rs.width=Math.round(fc.width*scale); rs.height=Math.round(fc.height*scale); rs.getContext('2d')!.drawImage(fc,0,0,rs.width,rs.height); fc=rs;}
+    onDone(fc.toDataURL('image/jpeg',0.88));
+  };
+  img.src=src;
+}
 
 export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [type, setType] = useState<'Cash Out' | 'Cash In'>('Cash Out');
@@ -37,6 +94,14 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [itemDropdown, setItemDropdown] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
 
+  // ── Scanner states ──
+  const [cameraActive, setCameraActive] = useState(false);
+  const [scanProcessing, setScanProcessing] = useState(false);
+  const [scanProgress, setScanProgress] = useState('');
+  const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const scanFileRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     fetch('/api/gas')
       .then(res => res.json())
@@ -62,7 +127,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       if (itemRef.current && !itemRef.current.contains(e.target as Node)) setItemDropdown(false);
     };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    return () => { document.removeEventListener('mousedown', handler); streamRef.current?.getTracks().forEach(t => t.stop()); };
   }, []);
 
   const filteredSuppliers = useMemo(() => {
@@ -93,24 +158,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     return newId;
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width; let height = img.height;
-        if (width > height) { if (width > 800) { height *= 800 / width; width = 800; } } else { if (height > 800) { width *= 800 / height; height = 800; } }
-        canvas.width = width; canvas.height = height;
-        canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
-        setImage(canvas.toDataURL('image/jpeg', 0.7));
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
+
 
   const openEditModal = (supplier: any) => {
     const services = supplier.service ? supplier.service.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
@@ -135,6 +183,31 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     } finally {
       setEditSaving(false);
     }
+  };
+
+  // ── Scanner helpers ──
+  const openCamera = async () => {
+    try {
+      const ms = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } });
+      streamRef.current = ms; setCameraActive(true);
+      requestAnimationFrame(() => { if (videoRef.current) { videoRef.current.srcObject = ms; videoRef.current.play(); } });
+    } catch { scanFileRef.current?.click(); }
+  };
+  const closeCamera = () => { streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null; setCameraActive(false); };
+  const captureFrame = () => {
+    const v = videoRef.current; if (!v) return;
+    const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext('2d')!.drawImage(v, 0, 0); closeCamera(); runScanPipeline(c.toDataURL('image/jpeg', 0.95));
+  };
+  const runScanPipeline = (src: string) => {
+    setScanProcessing(true); setScanProgress('📐 Edge Detection...');
+    setTimeout(() => { setScanProgress('✂️ Auto Crop...'); setTimeout(() => { setScanProgress('⚡ Enhancing...');
+      processImagePipeline(src, result => { setImage(result); setScanProcessing(false); setScanProgress(''); });
+    }, 300); }, 200);
+  };
+  const handleScanFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader(); reader.onload = ev => runScanPipeline(ev.target!.result as string); reader.readAsDataURL(file); e.target.value = '';
   };
 
   const resetForm = () => {
@@ -215,6 +288,44 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
   return (
     <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950">
+
+      {/* ── CAMERA FULLSCREEN ── */}
+      {cameraActive && (
+        <div className="fixed inset-0 z-[300] bg-black flex flex-col">
+          <div className="relative flex-1 overflow-hidden">
+            <video ref={videoRef} className="w-full h-full object-cover" playsInline autoPlay muted/>
+            <div className="absolute inset-0 pointer-events-none" style={{background:'radial-gradient(ellipse 72% 55% at 50% 45%, transparent 80%, rgba(0,0,0,0.6) 100%)'}}/>
+            {/* Guide frame */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="relative" style={{width:'78%',height:'58%'}}>
+                {(['tl','tr','bl','br'] as const).map(pos=>(
+                  <span key={pos} className="absolute w-8 h-8 block" style={{
+                    top:pos.startsWith('t')?0:'auto', bottom:pos.startsWith('b')?0:'auto',
+                    left:pos.endsWith('l')?0:'auto', right:pos.endsWith('r')?0:'auto',
+                    borderTop:pos.startsWith('t')?'3px solid #34d399':undefined, borderBottom:pos.startsWith('b')?'3px solid #34d399':undefined,
+                    borderLeft:pos.endsWith('l')?'3px solid #34d399':undefined, borderRight:pos.endsWith('r')?'3px solid #34d399':undefined,
+                    borderRadius:pos==='tl'?'4px 0 0 0':pos==='tr'?'0 4px 0 0':pos==='bl'?'0 0 0 4px':'0 0 4px 0',
+                  }}/>
+                ))}
+                <div style={{position:'absolute',inset:'4px',overflow:'hidden'}}>
+                  <div style={{position:'absolute',left:0,right:0,height:'2px',background:'linear-gradient(90deg,transparent,#34d399,transparent)',animation:'scanline 2s linear infinite'}}/>
+                </div>
+              </div>
+            </div>
+            <div className="absolute bottom-32 inset-x-0 flex justify-center">
+              <span className="bg-black/50 text-white text-[11px] font-black px-4 py-1.5 rounded-full tracking-widest uppercase">Document ကို Frame ထဲ ထည့်ပါ</span>
+            </div>
+          </div>
+          <div className="bg-black py-8 flex items-center justify-around">
+            <button onClick={closeCamera} className="w-12 h-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center"><X size={22} className="text-white"/></button>
+            <button onClick={captureFrame} className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-2xl active:scale-95 transition-transform">
+              <div className="w-16 h-16 rounded-full bg-white border-4 border-slate-300 flex items-center justify-center"><Camera size={28} className="text-slate-700"/></div>
+            </button>
+            <button onClick={()=>{closeCamera();scanFileRef.current?.click();}} className="w-12 h-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center"><Upload size={18} className="text-white"/></button>
+          </div>
+          <style>{`@keyframes scanline{0%{top:-4px}100%{top:calc(100% + 4px)}}`}</style>
+        </div>
+      )}
 
       {toastMsg && (
         <div className="absolute top-4 right-4 bg-emerald-50 border border-emerald-200 text-slate-950 p-4 rounded-xl shadow-lg flex items-center gap-3 z-50 animate-bounce font-black">
@@ -463,23 +574,54 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             </div>
             )}
 
-            {/* Per-item photo */}
+            {/* ── SCAN / PHOTO ── */}
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1 font-black"><Camera size={12}/> ITEM PHOTO <span className="text-slate-300 normal-case font-normal">(optional)</span></label>
-              <div className="relative h-28 bg-white rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
-                {image ? (
-                  <>
-                    <img src={image} className="w-full h-full object-cover"/>
-                    <button onClick={() => setImage('')} className="absolute top-2 right-2 bg-rose-100 text-rose-600 border border-rose-200 p-1.5 rounded-full shadow-sm"><Trash2 size={12}/></button>
-                    <span className="absolute bottom-2 left-2 bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full border border-emerald-200">📷 PHOTO ATTACHED</span>
-                  </>
-                ) : (
-                  <label className="cursor-pointer flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors">
-                    <Camera size={24}/>
-                    <span className="text-[9px] font-black uppercase">TAP TO ADD PHOTO</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload}/>
-                  </label>
+              <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1.5 font-black">
+                <ScanLine size={12}/> SCAN / PHOTO
+                <span className="text-emerald-600 bg-emerald-50 border border-emerald-200 text-[8px] px-1.5 py-0.5 rounded-full font-black ml-1">AUTO CROP + ENHANCE</span>
+                <span className="text-slate-300 normal-case font-normal text-[9px]">(optional)</span>
+              </label>
+
+              <div className="relative min-h-28 bg-white rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
+
+                {/* Processing overlay */}
+                {scanProcessing && (
+                  <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center gap-3 z-10">
+                    <div className="relative"><Zap size={32} className="text-emerald-400 animate-pulse"/><div className="absolute inset-0 rounded-full bg-emerald-400/20 animate-ping"/></div>
+                    <p className="text-white text-[10px] font-black tracking-widest animate-pulse">{scanProgress}</p>
+                    <div className="w-32 h-1 bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-400 rounded-full animate-pulse" style={{width:'60%'}}/></div>
+                  </div>
                 )}
+
+                {/* Preview */}
+                {!scanProcessing && image && (
+                  <>
+                    <img src={image} className="w-full max-h-52 object-contain"/>
+                    <div className="absolute top-2 left-2 bg-emerald-500 text-white text-[9px] font-black px-2 py-1 rounded-full flex items-center gap-1 shadow"><Check size={9}/> SCANNED & ENHANCED</div>
+                    <div className="absolute top-2 right-2 flex gap-1.5">
+                      <button onClick={() => { setImage(''); openCamera(); }} className="bg-blue-100 text-blue-600 border border-blue-200 p-1.5 rounded-full shadow-sm"><Camera size={12}/></button>
+                      <button onClick={() => scanFileRef.current?.click()} className="bg-amber-100 text-amber-600 border border-amber-200 p-1.5 rounded-full shadow-sm"><RotateCcw size={12}/></button>
+                      <button onClick={() => setImage('')} className="bg-rose-100 text-rose-600 border border-rose-200 p-1.5 rounded-full shadow-sm"><Trash2 size={12}/></button>
+                    </div>
+                  </>
+                )}
+
+                {/* Idle */}
+                {!scanProcessing && !image && (
+                  <div className="flex flex-col items-center gap-3 py-5">
+                    <div className="flex gap-3">
+                      <button onClick={openCamera} className="flex flex-col items-center gap-1.5 bg-slate-950 text-white px-6 py-3 rounded-xl hover:bg-slate-800 active:scale-95 transition-all shadow-md">
+                        <Camera size={22}/><span className="text-[9px] font-black uppercase tracking-wider">Camera</span>
+                      </button>
+                      <button onClick={() => scanFileRef.current?.click()} className="flex flex-col items-center gap-1.5 bg-slate-100 text-slate-700 border border-slate-200 px-6 py-3 rounded-xl hover:bg-slate-200 active:scale-95 transition-all">
+                        <Upload size={22}/><span className="text-[9px] font-black uppercase tracking-wider">Gallery</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-400 text-[9px]"><ScanLine size={10}/><span>ရိုက်ပြီးတာနဲ့ Auto Crop + Enhance လုပ်မည်</span></div>
+                  </div>
+                )}
+
+                <input ref={scanFileRef} type="file" accept="image/*" className="hidden" onChange={handleScanFile}/>
               </div>
             </div>
 

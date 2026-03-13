@@ -23,7 +23,6 @@ function getPresetDates(preset: string) {
 export default function FinancialDashboard({ vouchers = [], onRefresh, dashboardDefaults = {} }: { vouchers: any[], onRefresh?: () => void, dashboardDefaults?: Record<string,string> }) {
   const [filter, setFilter] = useState({ startDate:'', endDate:'', category:'', subCategory:'', vendor:'', item:'', enteredBy:'', account:'' });
 
-  const defaultsApplied = React.useRef(false);
   const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });
@@ -76,22 +75,18 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const enteredByOptions = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.entered_by))).filter(Boolean).sort(),[normalizedData]);
   const accountOptions   = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.account))).filter(Boolean).sort(),[normalizedData]);
 
-  // Default filter: KTS account auto-detect — accountOptions ပြည့်မှသာ run
-  React.useEffect(()=>{
-    if(defaultsApplied.current) return;
-    if(accountOptions.length === 0) return;          // accountOptions မပြည့်သေးရင် စောင့်
-    defaultsApplied.current = true;
-    const kts = accountOptions.find(a => a.toLowerCase().includes('kts'));
-    const acc = dashboardDefaults.account || kts || '';
-    if(acc) setFilter(f=>({ ...f, account: acc,
-      ...(dashboardDefaults.enteredBy ? { enteredBy: dashboardDefaults.enteredBy } : {}),
-    }));
-  },[accountOptions, dashboardDefaults]);
+  // KTS default — useEffect မသုံးဘဲ directly compute လုပ်သည် (timing issue မရှိ)
+  const defaultAccount = useMemo(()=>{
+    const gm = accountOptions.find(a => a.toLowerCase().includes('gm'));
+    return dashboardDefaults.account || gm || '';
+  },[accountOptions, dashboardDefaults.account]);
+
+  const activeAccount = filter.account || defaultAccount;
 
   const filtered = useMemo(()=>normalizedData.filter(v=>{
     const inDate=(!filter.startDate||v.date>=filter.startDate)&&(!filter.endDate||v.date<=filter.endDate);
-    return inDate&&(!filter.category||v.category===filter.category)&&(!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))&&(!filter.vendor||v.vendor===filter.vendor)&&(!filter.enteredBy||v.entered_by===filter.enteredBy)&&(!filter.account||v.account===filter.account)&&(!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
-  }),[normalizedData,filter]);
+    return inDate&&(!filter.category||v.category===filter.category)&&(!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))&&(!filter.vendor||v.vendor===filter.vendor)&&(!filter.enteredBy||v.entered_by===filter.enteredBy)&&(!activeAccount||v.account===activeAccount)&&(!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
+  }),[normalizedData,filter,activeAccount]);
 
   const analytics = useMemo(()=>{
     let totalIn=0,totalOut=0;
@@ -223,7 +218,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
           <FSelect label="SUB-CATEGORY" value={filter.subCategory} options={subCategoryOptions} onChange={(v:string)=>setFilter({...filter,subCategory:v})}/>
           <FSelect label="VENDOR"       value={filter.vendor}      options={vendorOptions}      onChange={(v:string)=>setFilter({...filter,vendor:v})}/>
           <FSelect label="BY"           value={filter.enteredBy}   options={enteredByOptions}   onChange={(v:string)=>setFilter({...filter,enteredBy:v})}/>
-          <FSelect label="ACCOUNT"      value={filter.account}     options={accountOptions}     onChange={(v:string)=>setFilter({...filter,account:v})}/>
+          <FSelect label="ACCOUNT"      value={activeAccount}      options={accountOptions}     onChange={(v:string)=>setFilter({...filter,account:v})}/>
           <input type="text" placeholder="ITEM ..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] outline-none font-black text-slate-950 uppercase"
             value={filter.item} onChange={e=>setFilter({...filter,item:e.target.value})}/>
         </div>

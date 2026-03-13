@@ -42,13 +42,11 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     if(ktsApplied.current) return;
     if(accountOptions.length === 0) return;
     ktsApplied.current = true;
-    // dashboardDefaults မှ account မပါမှ auto-detect
     if(!dashboardDefaults.account){
       const kts = accountOptions.find(a => a.toLowerCase().includes('kts'));
       if(kts) setFilter(f => ({ ...f, account: kts }));
     }
   },[accountOptions, dashboardDefaults.account]);
-  const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });
   const [activePreset, setActivePreset] = useState('');
@@ -99,6 +97,18 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const vendorOptions    = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.vendor))).filter(Boolean).sort(),[normalizedData]);
   const enteredByOptions = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.entered_by))).filter(Boolean).sort(),[normalizedData]);
   const accountOptions   = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.account))).filter(Boolean).sort(),[normalizedData]);
+
+  // KTS account auto-default — API defaults မပါလာရင် voucher data မှ ရှာ
+  const ktsApplied = React.useRef(false);
+  React.useEffect(()=>{
+    if(ktsApplied.current) return;
+    if(accountOptions.length === 0) return;
+    ktsApplied.current = true;
+    if(!dashboardDefaults.account){
+      const kts = accountOptions.find(a => a.toLowerCase().includes('kts'));
+      if(kts) setFilter(f => ({ ...f, account: kts }));
+    }
+  },[accountOptions, dashboardDefaults.account]);
 
   const filtered = useMemo(()=>normalizedData.filter(v=>{
     const inDate=(!filter.startDate||v.date>=filter.startDate)&&(!filter.endDate||v.date<=filter.endDate);

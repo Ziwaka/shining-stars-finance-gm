@@ -24,6 +24,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const [filter, setFilter] = useState({ startDate:'', endDate:'', category:'', subCategory:'', vendor:'', item:'', enteredBy:'', account:'' });
 
   const defaultsApplied = React.useRef(false);
+  const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });
   const [activePreset, setActivePreset] = useState('');

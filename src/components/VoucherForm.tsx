@@ -124,7 +124,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           accounts: data.accounts || []
         });
         if (data.users?.length > 0) setEnteredBy(String(data.users[0]));
-        if (data.accounts?.length > 0) setAccount(String(data.accounts[0]));
+        if (data.accounts?.length > 0) {
+          const kts = data.accounts.find((a: any) => String(a).toLowerCase().includes('kts'));
+          setAccount(kts ? String(kts) : String(data.accounts[0]));
+        }
       })
       .catch(err => console.error('Failed to fetch config:', err));
   }, []);

@@ -125,8 +125,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         });
         if (data.users?.length > 0) setEnteredBy(String(data.users[0]));
         if (data.accounts?.length > 0) {
-          const kts = data.accounts.find((a: any) => String(a).toLowerCase().includes('kts'));
-          setAccount(kts ? String(kts) : String(data.accounts[0]));
+          const gm = data.accounts.find((a: any) => String(a).toLowerCase().includes('gm'));
+          setAccount(gm ? String(gm) : String(data.accounts[0]));
         }
       })
       .catch(err => console.error('Failed to fetch config:', err));
@@ -210,58 +210,70 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const v = videoRef.current; if (!v) return;
     const c = document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight;
     c.getContext('2d')!.drawImage(v,0,0); closeCamera();
-    openCropEditor(c.toDataURL('image/jpeg',0.95));
+    openCropEditor(c.toDataURL('image/jpeg',0.95));  // Camera only → Crop Editor
   };
 
-  // ── Open crop editor: auto-detect initial bounds ──
   const openCropEditor = (src: string) => {
     setRawSrc(src);
-    // Try auto-detect for initial suggestion
     const img = new Image();
     img.onload = () => {
       const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
       const ctx=c.getContext('2d')!; ctx.drawImage(img,0,0);
-      const id=ctx.getImageData(0,0,c.width,c.height);
-      const b=autoCrop(id);
-      if(b){
-        setCropRect({
-          x: b.left/img.width, y: b.top/img.height,
-          w: (b.right-b.left)/img.width, h: (b.bottom-b.top)/img.height,
-        });
-      } else {
-        setCropRect({x:0.04, y:0.04, w:0.92, h:0.92});
-      }
+      const b=autoCrop(ctx.getImageData(0,0,c.width,c.height));
+      setCropRect(b ? {x:b.left/img.width,y:b.top/img.height,w:(b.right-b.left)/img.width,h:(b.bottom-b.top)/img.height} : {x:0.04,y:0.04,w:0.92,h:0.92});
       setCropMode(true);
     };
     img.src=src;
   };
 
+  // Gallery → enhance only, skip crop
   const handleScanFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file=e.target.files?.[0]; if(!file) return;
-    const reader=new FileReader(); reader.onload=ev=>openCropEditor(ev.target!.result as string); reader.readAsDataURL(file); e.target.value='';
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const src=ev.target!.result as string;
+      setScanProcessing(true); setScanProgress('⚡ Enhancing...');
+      const img=new Image();
+      img.onload=()=>{
+        const c=document.createElement('canvas'); c.width=img.width; c.height=img.height;
+        const ctx=c.getContext('2d')!; ctx.drawImage(img,0,0);
+        const id=autoEnhance(ctx.getImageData(0,0,c.width,c.height));
+        ctx.putImageData(id,0,0);
+        const MAX=1400,scale=Math.min(1,MAX/c.width,MAX/c.height);
+        let fc=c;
+        if(scale<1){const rs=document.createElement('canvas');rs.width=Math.round(c.width*scale);rs.height=Math.round(c.height*scale);rs.getContext('2d')!.drawImage(c,0,0,rs.width,rs.height);fc=rs;}
+        setImage(fc.toDataURL('image/jpeg',0.88));
+        setScanProcessing(false); setScanProgress('');
+      };
+      img.src=src;
+    };
+    reader.readAsDataURL(file); e.target.value='';
   };
 
-  // ── Crop drag logic (pointer events, works mouse+touch) ──
+  // Smooth crop drag — RAF throttle
+  const rafRef = useRef<number>(0);
   const onCropPointerDown = (e: React.PointerEvent, handle: string) => {
     e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
     dragState.current = { handle, startX:e.clientX, startY:e.clientY, startRect:{...cropRect} };
   };
   const onCropPointerMove = (e: React.PointerEvent) => {
     const ds=dragState.current; if(!ds) return;
-    const el=cropImgRef.current; if(!el) return;
-    const { width:W, height:H }=el.getBoundingClientRect();
-    const dx=(e.clientX-ds.startX)/W, dy=(e.clientY-ds.startY)/H;
-    const MIN=0.05;
-    const r={...ds.startRect};
-    const { handle:h }=ds;
-    if(h==='move')          { r.x=clamp(r.x+dx,0,1-r.w); r.y=clamp(r.y+dy,0,1-r.h); }
-    if(h.includes('l'))     { const nx=clamp(r.x+dx,0,r.x+r.w-MIN); r.w+=r.x-nx; r.x=nx; }
-    if(h.includes('r'))     { r.w=clamp(r.w+dx,MIN,1-r.x); }
-    if(h.includes('t'))     { const ny=clamp(r.y+dy,0,r.y+r.h-MIN); r.h+=r.y-ny; r.y=ny; }
-    if(h.includes('b'))     { r.h=clamp(r.h+dy,MIN,1-r.y); }
-    setCropRect(r);
+    const cx=e.clientX, cy=e.clientY;
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current=requestAnimationFrame(()=>{
+      const el=cropImgRef.current; if(!el) return;
+      const {width:W,height:H}=el.getBoundingClientRect();
+      const dx=(cx-ds.startX)/W, dy=(cy-ds.startY)/H;
+      const MIN=0.05, r={...ds.startRect}, h=ds.handle;
+      if(h==='move')      { r.x=clamp(r.x+dx,0,1-r.w); r.y=clamp(r.y+dy,0,1-r.h); }
+      if(h.includes('l')) { const nx=clamp(r.x+dx,0,r.x+r.w-MIN); r.w+=r.x-nx; r.x=nx; }
+      if(h.includes('r')) { r.w=clamp(r.w+dx,MIN,1-r.x); }
+      if(h.includes('t')) { const ny=clamp(r.y+dy,0,r.y+r.h-MIN); r.h+=r.y-ny; r.y=ny; }
+      if(h.includes('b')) { r.h=clamp(r.h+dy,MIN,1-r.y); }
+      setCropRect(r);
+    });
   };
-  const onCropPointerUp = () => { dragState.current=null; };
+  const onCropPointerUp = () => { dragState.current=null; cancelAnimationFrame(rafRef.current); };
 
   // ── Apply crop then enhance ──
   const applyCrop = () => {

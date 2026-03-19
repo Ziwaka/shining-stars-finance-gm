@@ -1,8 +1,20 @@
 @import "tailwindcss";
 
+/* ── Lavender Brand Palette ─────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --lav-light  : #CBCBE5;   /* app background   */
+  --lav-mid    : #9E9ECA;   /* header / accents */
+  --lav-deep   : #6B6BA8;   /* selected / dark  */
+  --lav-ink    : #1E1B4B;   /* primary text     */
+  --lav-muted  : #6B6BA8;   /* secondary text   */
+  --lav-border : rgba(158,158,202,0.3);
+
+  --background : #CBCBE5;
+  --foreground : #1E1B4B;
+
+  /* Gold accent kept for logo / active states */
+  --gold       : #fbbf24;
+  --gold-deep  : #d97706;
 }
 
 @theme inline {
@@ -12,15 +24,65 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base reset ───────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background : var(--background);
+  color      : var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-weight: 500;
+}
+
+/* ── Shining Stars Utility Classes ───────────────────────────────────────── */
+.bg-gold          { background-color: #fbbf24 !important; }
+.text-gold        { color:            #fbbf24 !important; }
+.border-gold      { border-color:     #fbbf24 !important; }
+
+.bg-lav-light     { background-color: #CBCBE5 !important; }
+.bg-lav-mid       { background-color: #9E9ECA !important; }
+.bg-lav-deep      { background-color: #6B6BA8 !important; }
+.text-lav-ink     { color:            #1E1B4B !important; }
+.text-lav-muted   { color:            #6B6BA8 !important; }
+
+/* Legacy dark classes (kept for backward compat but redirect to lavender) */
+.bg-purple        { background-color: #6B6BA8 !important; }
+.text-purple      { color:            #6B6BA8 !important; }
+.border-purple    { border-color:     #9E9ECA !important; }
+.bg-amber-light   { background-color: #FEF3C7 !important; }
+.text-amber-gold  { color:            #D97706 !important; }
+.bg-amber-gold    { background-color: #FCD34D !important; }
+.bg-dark          { background-color: #1E1B4B !important; }
+.bg-app           { background-color: #CBCBE5 !important; }
+
+.hover\:bg-gold:hover        { background-color: #fbbf24; }
+.hover\:text-gold:hover      { color:            #fbbf24; }
+.hover\:border-gold:hover    { border-color:     #fbbf24; }
+.hover\:bg-purple:hover      { background-color: #6B6BA8; }
+.focus\:border-gold:focus    { border-color:     #fbbf24; }
+.focus\:border-purple:focus  { border-color:     #9E9ECA; }
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: rgba(203,203,229,0.4); }
+::-webkit-scrollbar-thumb { background: #9E9ECA; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #6B6BA8; }
+
+/* ── Card / surface helpers ──────────────────────────────────────────────── */
+.lav-card {
+  background   : rgba(255,255,255,0.72);
+  border       : 1px solid rgba(158,158,202,0.28);
+  border-radius: 16px;
+  box-shadow   : 0 2px 12px rgba(107,107,168,0.10);
+}
+
+/* ── Input reset for lavender forms ─────────────────────────────────────── */
+input, select, textarea {
+  font-family: inherit;
 }

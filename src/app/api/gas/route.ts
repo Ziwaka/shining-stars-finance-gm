@@ -72,11 +72,21 @@ export async function POST(req: NextRequest) {
     if (action === 'sendVoucher') {
       const items: any[] = body.items || [];
 
-      // GAS သို့ items အကုန် save
-      for (const item of items) {
-        await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
+      // GAS သို့ items အကုန် save — partial failure tracking
+      const failed: number[] = [];
+      for (let i = 0; i < items.length; i++) {
+        try {
+          const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items[i]) });
+          if (!res.ok) failed.push(i);
+        } catch {
+          failed.push(i);
+        }
       }
       cache = null;
+
+      if (failed.length > 0) {
+        return NextResponse.json({ result: 'partial', failedIndexes: failed, telegram: 'skipped' }, { status: 207 });
+      }
 
       const first = items[0];
       console.log('[sendVoucher] type:', first?.type);

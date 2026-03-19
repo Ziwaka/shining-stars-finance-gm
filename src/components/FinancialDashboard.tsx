@@ -2,11 +2,14 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2, ShieldAlert, ChevronDown, RefreshCcw } from 'lucide-react';
+import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2, ShieldAlert, ChevronDown, RefreshCcw, Wallet, Trophy, Download } from 'lucide-react';
 import { deleteFromSheet } from '@/lib/api';
+import type { Voucher, VoucherRaw, DashboardAnalytics } from '@/lib/types';
 
 const COLORS = ['#f43f5e','#fb923c','#facc15','#4ade80','#34d399','#22d3ee','#818cf8','#c084fc','#f472b6','#94a3b8','#60a5fa','#a78bfa'];
 const fmt = (n: number) => n.toLocaleString();
+
+const ALL_ACCOUNTS = '__ALL__';
 
 function getPresetDates(preset: string) {
   const now = new Date();
@@ -20,25 +23,50 @@ function getPresetDates(preset: string) {
   return { startDate:'', endDate:'' };
 }
 
-export default function FinancialDashboard({ vouchers = [], onRefresh, dashboardDefaults = {} }: { vouchers: any[], onRefresh?: () => void, dashboardDefaults?: Record<string,string> }) {
-  const [filter, setFilter] = useState({ startDate:'', endDate:'', category:'', subCategory:'', vendor:'', item:'', enteredBy:'', account:'' });
+function exportCSV(data: Voucher[], filename: string) {
+  const headers = ['Date','Voucher No','Type','Account','Category','Sub1','Sub2','Vendor','Item','Amount (MMK)','Entered By'];
+  const rows = data.map(v => [
+    v.date, v.voucherno, v.type, v.account, v.category,
+    v.sub1, v.sub2, v.vendor,
+    `"${v.item.replace(/"/g,'""')}"`,
+    v.cost_total, v.entered_by,
+  ]);
+  const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 
+interface Props {
+  vouchers: VoucherRaw[];
+  onRefresh?: () => void;
+  dashboardDefaults?: Record<string, string>;
+}
+
+export default function FinancialDashboard({ vouchers = [], onRefresh, dashboardDefaults = {} }: Props) {
+  const [filter, setFilter] = useState({
+    startDate:'', endDate:'', category:'', subCategory:'',
+    vendor:'', item:'', enteredBy:'', account: '',
+  });
   const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });
   const [activePreset, setActivePreset] = useState('');
-  const [openCats, setOpenCats]       = useState<Record<string,boolean>>({});
+  const [openCats, setOpenCats] = useState<Record<string,boolean>>({});
 
   const toggleCat = (key: string) => setOpenCats(p => ({...p, [key]: !p[key]}));
-
   const applyPreset = (preset: string) => { setFilter(f=>({...f,...getPresetDates(preset)})); setActivePreset(preset); };
-  const clearFilter = () => { setFilter({startDate:'',endDate:'',category:'',subCategory:'',vendor:'',item:'',enteredBy:'',account:''}); setActivePreset(''); };
+  const clearFilter = () => {
+    setFilter({ startDate:'',endDate:'',category:'',subCategory:'',vendor:'',item:'',enteredBy:'',account:'' });
+    setActivePreset('');
+  };
   const handleRefresh = async () => {
     if (!onRefresh||isRefreshing) return;
     setIsRefreshing(true); await onRefresh(); setTimeout(()=>setIsRefreshing(false),1000);
   };
 
-  const normalizedData = useMemo(() => (vouchers||[]).map(v => {
+  const normalizedData = useMemo<Voucher[]>(() => (vouchers||[]).map((v: VoucherRaw) => {
     const cleanDate = (v.date||v.Date||'').toString().split('T')[0];
     const rawCost   = v['cost_(total)']||v.cost_total||v.Cost_Total||0;
     const rawIncome = v.income||v.Income||0;
@@ -55,7 +83,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
       sub3: (v.sub_3||v.sub3||'').toString().toUpperCase(),
       sub4: (v.sub_4||v.sub4||'').toString().toUpperCase(),
       sub5: (v.sub_5||v.sub5||'').toString().toUpperCase(),
-      item: (v.item_description||v['item_description']||v.item||'').toString(),
+      item: (v.item_description||v.item||'').toString(),
       vendor: (v.vendor||v.Vendor||'').toString(),
       note: (v.note||v.Note||'').toString(),
       cost_total: amount,
@@ -75,27 +103,35 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const enteredByOptions = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.entered_by))).filter(Boolean).sort(),[normalizedData]);
   const accountOptions   = useMemo(()=>Array.from(new Set(normalizedData.map(v=>v.account))).filter(Boolean).sort(),[normalizedData]);
 
-  // KTS default — useEffect မသုံးဘဲ directly compute လုပ်သည် (timing issue မရှိ)
   const defaultAccount = useMemo(()=>{
     const gm = accountOptions.find(a => a.toLowerCase().includes('gm'));
     return dashboardDefaults.account || gm || '';
   },[accountOptions, dashboardDefaults.account]);
 
-  const activeAccount = filter.account || defaultAccount;
+  // '' → use default,  ALL_ACCOUNTS → show all accounts combined
+  const activeAccount = filter.account === '' ? defaultAccount : (filter.account === ALL_ACCOUNTS ? '' : filter.account);
+  const isAllAccounts = filter.account === ALL_ACCOUNTS;
 
-  const filtered = useMemo(()=>normalizedData.filter(v=>{
-    const inDate=(!filter.startDate||v.date>=filter.startDate)&&(!filter.endDate||v.date<=filter.endDate);
-    return inDate&&(!filter.category||v.category===filter.category)&&(!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))&&(!filter.vendor||v.vendor===filter.vendor)&&(!filter.enteredBy||v.entered_by===filter.enteredBy)&&(!activeAccount||v.account===activeAccount)&&(!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
+  const filtered = useMemo<Voucher[]>(()=>normalizedData.filter(v=>{
+    const inDate = (!filter.startDate||v.date>=filter.startDate)&&(!filter.endDate||v.date<=filter.endDate);
+    return inDate
+      && (!filter.category||v.category===filter.category)
+      && (!filter.subCategory||[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].includes(filter.subCategory))
+      && (!filter.vendor||v.vendor===filter.vendor)
+      && (!filter.enteredBy||v.entered_by===filter.enteredBy)
+      && (!activeAccount||v.account===activeAccount)
+      && (!filter.item||v.item.toLowerCase().includes(filter.item.toLowerCase()));
   }),[normalizedData,filter,activeAccount]);
 
-  const analytics = useMemo(()=>{
+  const analytics = useMemo<DashboardAnalytics>(()=>{
     let totalIn=0,totalOut=0;
     const catGroup: Record<string,number>={};
-    const dailyMap: Record<string,any>={};
-    const monthMap: Record<string,any>={};
+    const dailyMap: Record<string,{date:string;income:number;expense:number}>={};
+    const monthMap: Record<string,{month:string;income:number;expense:number}>={};
     filtered.forEach(v=>{
       const isIn=v.type==='Cash In';
-      if(isIn) totalIn+=v.cost_total; else { totalOut+=v.cost_total; catGroup[v.category]=(catGroup[v.category]||0)+v.cost_total; }
+      if(isIn) totalIn+=v.cost_total;
+      else { totalOut+=v.cost_total; catGroup[v.category]=(catGroup[v.category]||0)+v.cost_total; }
       if(!dailyMap[v.date]) dailyMap[v.date]={date:v.date,income:0,expense:0};
       if(isIn) dailyMap[v.date].income+=v.cost_total; else dailyMap[v.date].expense+=v.cost_total;
       if(!monthMap[v.month]) monthMap[v.month]={month:v.month,income:0,expense:0};
@@ -109,33 +145,48 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     };
   },[filtered]);
 
-  // Sub-category stacked charts per category
+  // Top 5 vendors by spend
+  const topVendors = useMemo(()=>{
+    const g: Record<string,number>={};
+    filtered.filter(v=>v.type==='Cash Out'&&v.vendor).forEach(v=>{g[v.vendor]=(g[v.vendor]||0)+v.cost_total;});
+    return Object.entries(g).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value).slice(0,5);
+  },[filtered]);
+
+  // Per-account summary for ALL mode
+  const accountSummary = useMemo(()=>{
+    if(!isAllAccounts) return [];
+    const g: Record<string,{acc:string;in:number;out:number}>={};
+    filtered.forEach(v=>{
+      if(!g[v.account]) g[v.account]={acc:v.account,in:0,out:0};
+      if(v.type==='Cash In') g[v.account].in+=v.cost_total; else g[v.account].out+=v.cost_total;
+    });
+    return Object.values(g).sort((a,b)=>b.out-a.out);
+  },[filtered,isAllAccounts]);
+
   const categorySpecificData = useMemo(()=>{
     const cats=Array.from(new Set(filtered.filter(v=>v.type==='Cash Out').map(v=>v.category)));
     return cats.map(catName=>{
       const catV=filtered.filter(v=>v.category===catName&&v.type==='Cash Out');
       const subKeysSet=new Set<string>();
-      const dateMap: Record<string,any>={};
+      const dateMap: Record<string,Record<string,number|string>>={};
       catV.forEach(v=>{
         if(!dateMap[v.date]) dateMap[v.date]={date:v.date};
         const parts=[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].filter(Boolean);
         const key=parts.join(' › ');
         subKeysSet.add(key);
-        dateMap[v.date][key]=(dateMap[v.date][key]||0)+v.cost_total;
+        dateMap[v.date][key]=((dateMap[v.date][key] as number)||0)+v.cost_total;
       });
       return {
-        name:catName,
-        total:catV.reduce((s,v)=>s+v.cost_total,0),
-        data:Object.values(dateMap).sort((a,b)=>a.date.localeCompare(b.date)),
+        name:catName, total:catV.reduce((s,v)=>s+v.cost_total,0),
+        data:Object.values(dateMap).sort((a,b)=>(a.date as string).localeCompare(b.date as string)),
         subKeys:Array.from(subKeysSet),
       };
     });
   },[filtered]);
 
-  // Audit log — Category → Vr. No. (newest date first)
   const groupedAuditLog = useMemo(()=>{
-    // Category level: { catName: { vrNo: { meta, items[] } } }
-    const g: Record<string, Record<string, { date:string, type:string, vendor:string, entered_by:string, account:string, items:any[] }>> = {};
+    type VrEntry = { date:string; type:string; vendor:string; entered_by:string; account:string; items:Voucher[] };
+    const g: Record<string, Record<string, VrEntry>> = {};
     const sorted=[...filtered].sort((a,b)=>b.date.localeCompare(a.date)||b.voucherno.localeCompare(a.voucherno));
     sorted.forEach(v=>{
       if(!g[v.category]) g[v.category]={};
@@ -151,39 +202,47 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const confirmDelete = async()=>{
     if(deleteModal.confirmInput!==deleteModal.voucherno) return;
     setDeleteModal(m=>({...m,loading:true}));
-    try { await deleteFromSheet(deleteModal.voucherno); setDeleteModal({open:false,voucherno:'',confirmInput:'',loading:false}); if(onRefresh) onRefresh(); }
-    catch { setDeleteModal(m=>({...m,loading:false})); alert('FAILED TO DELETE.'); }
+    try {
+      await deleteFromSheet(deleteModal.voucherno);
+      setDeleteModal({open:false,voucherno:'',confirmInput:'',loading:false});
+      if(onRefresh) onRefresh();
+    } catch {
+      setDeleteModal(m=>({...m,loading:false}));
+      alert('FAILED TO DELETE.');
+    }
   };
 
   const PRESETS=[{key:'7d',label:'7 ရက်'},{key:'30d',label:'30 ရက်'},{key:'month',label:'ဒီလ'},{key:'last',label:'ပြီးခဲ့တဲ့လ'}];
 
-  const FSelect=({label,value,options,onChange}:any)=>(
+  const FSelect=({label,value,options,onChange,special}:{label:string;value:string;options:string[];onChange:(v:string)=>void;special?:{value:string;label:string}})=>(
     <div className="relative">
       <select className="appearance-none w-full pl-3 pr-7 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] outline-none font-black text-slate-950 uppercase cursor-pointer" value={value} onChange={e=>onChange(e.target.value)}>
         <option value="">{label}</option>
+        {special&&<option value={special.value}>{special.label}</option>}
         {options.map((o:string)=><option key={o} value={o}>{o}</option>)}
       </select>
       <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
     </div>
   );
 
-  const TrendChart=({data,xKey}:{data:any[],xKey:string})=>(
+  const TrendChart=({data,xKey}:{data:{date?:string;month?:string;income:number;expense:number}[];xKey:string})=>(
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} barGap={2} margin={{left:-20,right:4,top:4,bottom:0}}>
         <CartesianGrid vertical={false} stroke="#f1f5f9"/>
         <XAxis dataKey={xKey} tick={{fontSize:7,fontWeight:900,fill:'#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={d=>xKey==='month'?d.slice(5)+' လ':d.slice(5)}/>
         <YAxis tick={{fontSize:7,fontWeight:900,fill:'#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}K`:String(v)}/>
-        <Tooltip formatter={(v:any)=>fmt(Number(v))+' MMK'} labelStyle={{fontSize:10,fontWeight:900}}/>
+        <Tooltip formatter={(v:unknown)=>fmt(Number(v))+' MMK'} labelStyle={{fontSize:10,fontWeight:900}}/>
         <Bar dataKey="income"  fill="#10b981" name="IN"  radius={[3,3,0,0]}/>
         <Bar dataKey="expense" fill="#f43f5e" name="OUT" radius={[3,3,0,0]}/>
       </BarChart>
     </ResponsiveContainer>
   );
 
+  const displayAccountLabel = isAllAccounts ? 'ALL ACCOUNTS' : (activeAccount || 'ALL');
+
   return (
     <div className="space-y-5 font-black text-slate-950 uppercase">
 
-      {/* Warning */}
       {analytics.balance<0&&(
         <div className="bg-rose-50 p-3 rounded-2xl border border-rose-200">
           <div className="animate-pulse flex justify-center items-center gap-2 text-[11px] tracking-widest font-black text-rose-700">
@@ -202,8 +261,14 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
               {p.label}
             </button>
           ))}
-          <button onClick={handleRefresh} disabled={isRefreshing} className="ml-auto p-2 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-50">
+          <button onClick={handleRefresh} disabled={isRefreshing} className="p-2 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 disabled:opacity-50">
             <RefreshCcw size={13} className={isRefreshing?'animate-spin':''}/>
+          </button>
+          <button
+            onClick={()=>exportCSV(filtered,`finance-${displayAccountLabel}-${new Date().toISOString().slice(0,10)}.csv`)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-black hover:bg-slate-100"
+          >
+            <Download size={12}/> CSV
           </button>
         </div>
         <div className="flex items-center gap-2">
@@ -218,7 +283,14 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
           <FSelect label="SUB-CATEGORY" value={filter.subCategory} options={subCategoryOptions} onChange={(v:string)=>setFilter({...filter,subCategory:v})}/>
           <FSelect label="VENDOR"       value={filter.vendor}      options={vendorOptions}      onChange={(v:string)=>setFilter({...filter,vendor:v})}/>
           <FSelect label="BY"           value={filter.enteredBy}   options={enteredByOptions}   onChange={(v:string)=>setFilter({...filter,enteredBy:v})}/>
-          <FSelect label="ACCOUNT"      value={activeAccount}      options={accountOptions}     onChange={(v:string)=>setFilter({...filter,account:v})}/>
+          {/* ACCOUNT with ALL ACCOUNTS combined option */}
+          <FSelect
+            label="ACCOUNT"
+            value={filter.account === '' ? defaultAccount : filter.account}
+            options={accountOptions}
+            onChange={(v:string)=>setFilter({...filter,account:v})}
+            special={{ value: ALL_ACCOUNTS, label: '★ ALL ACCOUNTS (COMBINED)' }}
+          />
           <input type="text" placeholder="ITEM ..." className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] outline-none font-black text-slate-950 uppercase"
             value={filter.item} onChange={e=>setFilter({...filter,item:e.target.value})}/>
         </div>
@@ -230,7 +302,34 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       </div>
 
-      {/* ── KPI TILES ── */}
+      {/* Account badge + count */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Wallet size={13} className="text-slate-400"/>
+        <span className="text-[10px] text-slate-500 tracking-widest">VIEWING:</span>
+        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${isAllAccounts?'bg-purple-50 text-purple-700 border-purple-200':'bg-slate-100 text-slate-700 border-slate-200'}`}>
+          {displayAccountLabel}
+        </span>
+        <span className="text-[10px] text-slate-400">{filtered.length} vouchers</span>
+      </div>
+
+      {/* Per-account breakdown — visible when ALL ACCOUNTS selected */}
+      {isAllAccounts && accountSummary.length > 1 && (
+        <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 space-y-2">
+          <h3 className="text-[9px] text-purple-600 tracking-widest mb-2">ACCOUNT BREAKDOWN</h3>
+          {accountSummary.map(acc=>(
+            <div key={acc.acc} className="flex items-center justify-between">
+              <span className="text-[11px] font-black text-slate-700">{acc.acc}</span>
+              <div className="flex gap-3 text-[11px]">
+                <span className="text-emerald-600">+{fmt(acc.in)}</span>
+                <span className="text-rose-600">-{fmt(acc.out)}</span>
+                <span className={`font-black ${acc.in-acc.out>=0?'text-purple-700':'text-rose-700'}`}>= {fmt(acc.in-acc.out)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* KPI tiles */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
           <p className="text-[9px] text-slate-500 mb-1 tracking-widest">CASH IN</p>
@@ -249,7 +348,30 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       </div>
 
-      {/* ── DAILY TREND ── */}
+      {/* Top 5 vendors */}
+      {topVendors.length > 0 && (
+        <div className="bg-white p-4 rounded-2xl border border-slate-200">
+          <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><Trophy size={13}/> TOP VENDORS BY SPEND</h3>
+          <div className="space-y-2">
+            {topVendors.map((v,i)=>{
+              const pct = analytics.totalOut > 0 ? Math.round((v.value/analytics.totalOut)*100) : 0;
+              return (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between text-[11px]">
+                    <span className="font-black text-slate-700 truncate max-w-[200px]">{v.name||'—'}</span>
+                    <span className="text-slate-500 shrink-0">{fmt(v.value)} <span className="text-[9px]">MMK</span> · {pct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-rose-400 rounded-full transition-all" style={{width:`${pct}%`}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Daily trend */}
       {analytics.dailyTrends.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><TrendingUp size={13}/> DAILY TREND</h3>
@@ -261,7 +383,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* ── MONTHLY TREND ── */}
+      {/* Monthly trend */}
       {analytics.monthlyTrends.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><TrendingUp size={13}/> MONTHLY TREND</h3>
@@ -273,7 +395,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* ── EXPENSE PIE ── */}
+      {/* Expense pie */}
       {analytics.categories.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><Layers size={13}/> EXPENSE ALLOCATION</h3>
@@ -282,14 +404,14 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={analytics.categories} innerRadius={35} outerRadius={55} paddingAngle={3} dataKey="value" stroke="none">
-                    {analytics.categories.map((_:any,i:number)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
+                    {analytics.categories.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
                   </Pie>
-                  <Tooltip formatter={(v:any)=>fmt(Number(v))+' MMK'}/>
+                  <Tooltip formatter={(v:unknown)=>fmt(Number(v))+' MMK'}/>
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="flex-1 min-w-0 space-y-1.5 overflow-y-auto max-h-[120px]">
-              {analytics.categories.map((cat:any,i:number)=>(
+              {analytics.categories.map((cat,i)=>(
                 <div key={i} className="flex items-center justify-between gap-2 min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor:COLORS[i%COLORS.length]}}/>
@@ -303,7 +425,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* ── SUB-CATEGORY BREAKDOWN ── */}
+      {/* Sub-category breakdown */}
       {categorySpecificData.length>0&&(
         <div className="space-y-3">
           <div className="flex items-center gap-2 px-1"><BarChart3 className="text-slate-400" size={15}/><h2 className="text-xs tracking-widest font-black">SUB-CATEGORY BREAKDOWN</h2></div>
@@ -317,18 +439,17 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={catChart.data} margin={{left:-20,right:4,top:4,bottom:0}}>
                     <CartesianGrid vertical={false} stroke="#f1f5f9"/>
-                    <XAxis dataKey="date" tick={{fontSize:7,fontWeight:900,fill:'#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={d=>d.slice(5)}/>
+                    <XAxis dataKey="date" tick={{fontSize:7,fontWeight:900,fill:'#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={d=>String(d).slice(5)}/>
                     <YAxis tick={{fontSize:7,fontWeight:900,fill:'#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={v=>v>=1000?`${(v/1000).toFixed(0)}K`:String(v)}/>
-                    <Tooltip formatter={(v:any)=>fmt(Number(v))+' MMK'}/>
-                    {catChart.subKeys.map((sub:string,sIdx:number)=>(
+                    <Tooltip formatter={(v:unknown)=>fmt(Number(v))+' MMK'}/>
+                    {catChart.subKeys.map((sub,sIdx)=>(
                       <Bar key={sub} dataKey={sub} stackId="a" fill={COLORS[sIdx%COLORS.length]} name={sub} radius={sIdx===catChart.subKeys.length-1?[3,3,0,0]:[0,0,0,0]}/>
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              {/* Sub key legend */}
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                {catChart.subKeys.map((sub:string,sIdx:number)=>(
+                {catChart.subKeys.map((sub,sIdx)=>(
                   <span key={sIdx} className="flex items-center gap-1 text-[9px] text-slate-500 font-black">
                     <span className="w-2 h-2 rounded-sm shrink-0" style={{backgroundColor:COLORS[sIdx%COLORS.length]}}/>
                     <span className="truncate max-w-[120px]">{sub}</span>
@@ -340,7 +461,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* ── AUDIT LOG — foldable per category ── */}
+      {/* Audit log */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 px-1"><ListChecks className="text-slate-400" size={15}/><h2 className="text-xs tracking-widest font-black">DETAILED AUDIT LOG</h2></div>
         {Object.keys(groupedAuditLog).map(catName=>{
@@ -351,7 +472,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
           const isOpen = openCats[catName]!==false;
           return (
             <div key={catName} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              {/* Category header */}
               <button onClick={()=>toggleCat(catName)} className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-100 hover:bg-slate-100 transition-colors">
                 <h3 className="text-xs tracking-widest font-black">{catName}</h3>
                 <div className="flex items-center gap-3">
@@ -363,14 +483,11 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
                   <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isOpen?'rotate-180':''}`}/>
                 </div>
               </button>
-
-              {/* Vr. No. groups */}
               {isOpen&&Object.entries(vrMap).map(([vrNo, vr])=>{
                 const vrTotal = vr.items.reduce((s,v)=>s+v.cost_total,0);
                 const isVrOpen = openCats[vrNo]!==false;
                 return (
                   <div key={vrNo} className="border-b border-slate-50 last:border-0">
-                    {/* Vr. header — foldable */}
                     <button onClick={()=>toggleCat(vrNo)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 shrink-0">{vrNo}</span>
@@ -388,16 +505,14 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
                         <ChevronDown size={11} className={`text-slate-300 transition-transform duration-150 ${isVrOpen?'rotate-180':''}`}/>
                       </div>
                     </button>
-
-                    {/* Items inside Vr. */}
                     {isVrOpen&&(
                       <div className="divide-y divide-slate-50 bg-slate-50/50">
-                        {vr.items.map((v:any,idx:number)=>(
+                        {vr.items.map((v,idx)=>(
                           <div key={idx} className="px-4 py-2.5 flex items-start gap-3">
                             <div className="flex-1 min-w-0 space-y-1">
                               <p className="text-xs font-black truncate">{v.item||'—'}</p>
                               <div className="flex flex-wrap gap-1">
-                                {[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].filter(Boolean).map((s:string,si:number)=>(
+                                {[v.sub1,v.sub2,v.sub3,v.sub4,v.sub5].filter(Boolean).map((s,si)=>(
                                   <span key={si} className="text-[8px] text-slate-400">{si>0?'›':''} {s}</span>
                                 ))}
                               </div>

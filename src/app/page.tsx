@@ -9,7 +9,7 @@ export default function Home() {
   const [phase, setPhase] = useState<'splash' | 'dashboard'>('splash');
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('SYSTEM - INITIALIZING');
-  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [vouchers, setVouchers] = useState<import('@/lib/types').VoucherRaw[]>([]);
   const [dashboardDefaults, setDashboardDefaults] = useState<Record<string,string>>({});
   const [dataLoading, setDataLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);

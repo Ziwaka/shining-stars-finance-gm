@@ -97,6 +97,13 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [itemDropdown, setItemDropdown] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
 
+  // ── Inline Category Add states ──
+  const [showAddCat,   setShowAddCat]   = useState(false);
+  const [newCatInput,  setNewCatInput]  = useState('');
+  const [showAddSub,   setShowAddSub]   = useState(false);
+  const [newSubInputs, setNewSubInputs] = useState({ sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' });
+  const [catBusy,      setCatBusy]      = useState(false);
+
   // ── Scanner states ──
   const [cameraActive, setCameraActive]     = useState(false);
   const [scanProcessing, setScanProcessing] = useState(false);
@@ -170,6 +177,59 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   };
 
 
+
+  // ── Inline Category helpers ──────────────────────────────
+  async function handleInlineAddCat() {
+    const cat = newCatInput.trim().toUpperCase();
+    if (!cat) return;
+    setCatBusy(true);
+    try {
+      const res = await fetch('/api/gas', {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ action:'manageCat', subAction:'add', category:cat, sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' }),
+      });
+      const d = await res.json();
+      if (d.result === 'saved') {
+        // refresh config silently
+        fetch('/api/gas?force=1').then(r => r.json()).then(data => {
+          setConfig((prev: any) => ({ ...prev, categoryList: data.categoryList || prev.categoryList }));
+        });
+        setCategory(cat);
+        setNewCatInput('');
+        setShowAddCat(false);
+      }
+    } finally { setCatBusy(false); }
+  }
+
+  async function handleInlineAddSub() {
+    if (!category || !newSubInputs.sub1.trim()) return;
+    setCatBusy(true);
+    try {
+      const res = await fetch('/api/gas', {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({
+          action:'manageCat', subAction:'add',
+          category,
+          sub1: newSubInputs.sub1.trim().toUpperCase(),
+          sub2: newSubInputs.sub2.trim().toUpperCase(),
+          sub3: newSubInputs.sub3.trim().toUpperCase(),
+          sub4: newSubInputs.sub4.trim().toUpperCase(),
+          sub5: newSubInputs.sub5.trim().toUpperCase(),
+        }),
+      });
+      const d = await res.json();
+      if (d.result === 'saved') {
+        fetch('/api/gas?force=1').then(r => r.json()).then(data => {
+          setConfig((prev: any) => ({ ...prev, categoryList: data.categoryList || prev.categoryList }));
+        });
+        setSub1(newSubInputs.sub1.trim().toUpperCase());
+        setNewSubInputs({ sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' });
+        setShowAddSub(false);
+      }
+    } finally { setCatBusy(false); }
+  }
 
   const openEditModal = (supplier: any) => {
     const services = supplier.service ? supplier.service.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
@@ -652,21 +712,84 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
           {/* Left — Category dropdowns */}
           <div className="space-y-4 font-black">
+            {/* CATEGORY */}
             <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 uppercase font-black">CATEGORY</label>
-              <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={category} onChange={e => { setCategory(e.target.value); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5(''); generateVrID(e.target.value, itemList); }}>
-                <option value="">SELECT CATEGORY</option>
-                {categoryOptions.map((c: any, i: number) => <option key={i} value={String(c)}>{String(c)}</option>)}
-              </select>
-            </div>
-            {sub1Options.length > 0 && (
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-500 uppercase font-black">SUB 1</label>
-                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={sub1} onChange={e => { setSub1(e.target.value); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }}>
-                  <option value="">SELECT</option>{sub1Options.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] text-slate-500 uppercase font-black">CATEGORY</label>
+                {!showAddCat && (
+                  <button type="button" onClick={() => { setShowAddCat(true); setNewCatInput(''); }}
+                    className="text-[9px] text-slate-400 hover:text-slate-950 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg font-black uppercase hover:border-slate-500 transition-all">
+                    + ADD
+                  </button>
+                )}
+              </div>
+              {showAddCat ? (
+                <div className="flex gap-1">
+                  <input autoFocus className="flex-1 p-2 bg-white border border-slate-400 rounded-xl text-xs font-black uppercase outline-none text-slate-950 placeholder:text-slate-300"
+                    placeholder="NEW CATEGORY"
+                    value={newCatInput}
+                    onChange={e => setNewCatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key==='Enter') handleInlineAddCat(); if (e.key==='Escape') setShowAddCat(false); }}
+                  />
+                  <button type="button" onClick={handleInlineAddCat} disabled={catBusy || !newCatInput.trim()}
+                    className="px-3 bg-slate-950 text-white rounded-xl text-[10px] font-black disabled:opacity-40">
+                    {catBusy ? '…' : 'SAVE'}
+                  </button>
+                  <button type="button" onClick={() => setShowAddCat(false)}
+                    className="px-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black">✕</button>
+                </div>
+              ) : (
+                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={category} onChange={e => { setCategory(e.target.value); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5(''); setShowAddSub(false); generateVrID(e.target.value, itemList); }}>
+                  <option value="">SELECT CATEGORY</option>
+                  {categoryOptions.map((c: any, i: number) => <option key={i} value={String(c)}>{String(c)}</option>)}
                 </select>
+              )}
+            </div>
+
+            {/* SUB 1 — show if options exist, OR category selected */}
+            {category && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-slate-500 uppercase font-black">SUB 1</label>
+                  {!showAddSub && (
+                    <button type="button" onClick={() => { setShowAddSub(true); setNewSubInputs({ sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' }); }}
+                      className="text-[9px] text-slate-400 hover:text-slate-950 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg font-black uppercase hover:border-slate-500 transition-all">
+                      + ADD SUB
+                    </button>
+                  )}
+                </div>
+                {showAddSub ? (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                    <p className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Sub Category အသစ်</p>
+                    {(['sub1','sub2','sub3','sub4','sub5'] as const).map((k, idx) => (
+                      <input key={k}
+                        autoFocus={idx===0}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-black uppercase outline-none focus:border-slate-500 text-slate-950 placeholder:text-slate-300"
+                        placeholder={`SUB ${idx+1}${idx===0?' *':''}`}
+                        value={newSubInputs[k]}
+                        onChange={e => setNewSubInputs(prev => ({ ...prev, [k]: e.target.value }))}
+                        onKeyDown={e => { if (e.key==='Escape') setShowAddSub(false); }}
+                      />
+                    ))}
+                    <div className="flex gap-2">
+                      <button type="button" onClick={handleInlineAddSub} disabled={catBusy || !newSubInputs.sub1.trim()}
+                        className="flex-1 bg-slate-950 text-white py-2 rounded-xl text-[10px] font-black disabled:opacity-40">
+                        {catBusy ? '…' : 'SAVE'}
+                      </button>
+                      <button type="button" onClick={() => setShowAddSub(false)}
+                        className="px-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black">CANCEL</button>
+                    </div>
+                  </div>
+                ) : sub1Options.length > 0 ? (
+                  <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={sub1} onChange={e => { setSub1(e.target.value); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }}>
+                    <option value="">SELECT</option>{sub1Options.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
+                  </select>
+                ) : (
+                  <p className="text-[10px] text-slate-300 uppercase tracking-widest py-1">Sub မရှိသေး — + ADD SUB နှိပ်ထည့်ပါ</p>
+                )}
               </div>
             )}
+
             {sub2Options.length > 0 && (
               <div className="space-y-1">
                 <label className="text-[10px] text-slate-500 uppercase font-black">SUB 2</label>

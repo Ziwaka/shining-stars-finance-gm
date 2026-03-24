@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect, useCallback } from 'react';
-import { Wifi, Cpu, CheckCircle2, Plus, ArrowRight, Landmark, RefreshCcw, Users } from 'lucide-react';
+import { Wifi, Cpu, CheckCircle2, Plus, ArrowRight, Landmark, RefreshCcw, Users, Layers } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import FinancialDashboard from '@/components/FinancialDashboard';
@@ -156,6 +156,9 @@ export default function Home() {
             </Link>
             <Link href="/suppliers" className="bg-white text-slate-950 border border-slate-200 px-4 py-2.5 rounded-2xl shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2 font-black text-xs">
               <Users size={14}/> SUPPLIERS
+            </Link>
+            <Link href="/categories" className="bg-white text-slate-950 border border-slate-200 px-4 py-2.5 rounded-2xl shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2 font-black text-xs">
+              <Layers size={14}/> CATEGORIES
             </Link>
             <Link href="/entry" className="bg-slate-950 text-white px-5 py-2.5 rounded-2xl shadow-lg hover:bg-slate-800 transition-all flex items-center gap-2 font-black text-xs ml-auto">
               <Plus size={15} strokeWidth={3}/> ADD NEW VOUCHER

@@ -60,6 +60,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(data);
     }
 
+    if (action === 'manageCat') {
+      const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+      cache = null;
+      return NextResponse.json(data);
+    }
+
     // ── send: GAS သို့ item သိမ်း (Telegram မပါ) ──
     if (action === 'send') {
       const res = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body.data) });

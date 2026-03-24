@@ -78,7 +78,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [sub3, setSub3] = useState('');
   const [sub4, setSub4] = useState('');
   const [sub5, setSub5] = useState('');
-  const [currentItem, setCurrentItem] = useState({ item_description: '', brand: '', count: '' as any, cost_piece: '' as any, note: '', km: '' as any });
+  const [currentItem, setCurrentItem] = useState({ item_description: '', brand: '', count: '' as any, cost_piece: '' as any, cost_total: '' as any, note: '', km: '' as any });
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [toastMsg, setToastMsg] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -100,8 +100,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   // ── Inline Category Add states ──
   const [showAddCat,   setShowAddCat]   = useState(false);
   const [newCatInput,  setNewCatInput]  = useState('');
-  const [showAddSub,   setShowAddSub]   = useState(false);
-  const [newSubInputs, setNewSubInputs] = useState({ sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' });
+  const [addSubLevel,  setAddSubLevel]  = useState<number>(0); // 0=hidden, 1-5=adding at that level
+  const [newSubInput,  setNewSubInput]  = useState(''); // input for the new sub value
   const [catBusy,      setCatBusy]      = useState(false);
 
   // ── Scanner states ──
@@ -203,7 +203,12 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   }
 
   async function handleInlineAddSub() {
-    if (!category || !newSubInputs.sub1.trim()) return;
+    if (!category || !newSubInput.trim() || addSubLevel === 0) return;
+    // Build the full path: use current selections for levels before addSubLevel
+    const subs = [sub1, sub2, sub3, sub4, sub5];
+    subs[addSubLevel - 1] = newSubInput.trim().toUpperCase();
+    // Clear levels after addSubLevel
+    for (let i = addSubLevel; i < 5; i++) subs[i] = '';
     setCatBusy(true);
     try {
       const res = await fetch('/api/gas', {
@@ -212,11 +217,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         body   : JSON.stringify({
           action:'manageCat', subAction:'add',
           category,
-          sub1: newSubInputs.sub1.trim().toUpperCase(),
-          sub2: newSubInputs.sub2.trim().toUpperCase(),
-          sub3: newSubInputs.sub3.trim().toUpperCase(),
-          sub4: newSubInputs.sub4.trim().toUpperCase(),
-          sub5: newSubInputs.sub5.trim().toUpperCase(),
+          sub1: subs[0], sub2: subs[1], sub3: subs[2], sub4: subs[3], sub5: subs[4],
         }),
       });
       const d = await res.json();
@@ -224,9 +225,14 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         fetch('/api/gas?force=1').then(r => r.json()).then(data => {
           setConfig((prev: any) => ({ ...prev, categoryList: data.categoryList || prev.categoryList }));
         });
-        setSub1(newSubInputs.sub1.trim().toUpperCase());
-        setNewSubInputs({ sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' });
-        setShowAddSub(false);
+        // Auto-select the newly added value
+        if (addSubLevel === 1) { setSub1(subs[0]); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }
+        if (addSubLevel === 2) { setSub2(subs[1]); setSub3(''); setSub4(''); setSub5(''); }
+        if (addSubLevel === 3) { setSub3(subs[2]); setSub4(''); setSub5(''); }
+        if (addSubLevel === 4) { setSub4(subs[3]); setSub5(''); }
+        if (addSubLevel === 5) { setSub5(subs[4]); }
+        setNewSubInput('');
+        setAddSubLevel(0);
       }
     } finally { setCatBusy(false); }
   }
@@ -363,16 +369,20 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const resetForm = () => {
     setVendor(''); setSupplierSearch(''); setSelectedSupplier(null);
     setCategory(''); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
-    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '', km: '' });
+    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', cost_total: '', note: '', km: '' });
     setItemSearch(''); setImage(''); setVoucherno('');
     setSubmitStatus('idle');
   };
 
   const addItem = () => {
-    const countNum = parseFloat(currentItem.count);
-    const costNum = parseInt(currentItem.cost_piece);
-    if (!vendor || !currentItem.item_description || isNaN(countNum)) return alert('REQUIRED: VENDOR, ITEM & QTY');
-    const total = Math.round(countNum * costNum);
+    const countNum = parseFloat(currentItem.count) || 0;
+    const costNum  = parseFloat(currentItem.cost_piece) || 0;
+    const totalFromState = parseFloat(currentItem.cost_total);
+    if (!vendor || !currentItem.item_description || countNum <= 0) return alert('REQUIRED: VENDOR, ITEM & QTY');
+    // Use manually entered total if available, otherwise calculate
+    const total = !isNaN(totalFromState) && totalFromState > 0
+      ? Math.round(totalFromState)
+      : Math.round(countNum * costNum);
 
     // ✅ Vr. No. — batch ထဲ ပထမ item ဆိုရင် generate၊ မဟုတ်ရင် အရင် voucherno ကိုပဲ သုံး
     const vrNo = itemList.length === 0 ? generateVrID(category, itemList) : voucherno;
@@ -395,7 +405,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setItemList(prev => [...prev, newItem]);
     setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`);
     setTimeout(() => setToastMsg(''), 3000);
-    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', note: '', km: '' });
+    setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', cost_total: '', note: '', km: '' });
     setItemSearch('');
     setImage('');
   };
@@ -739,89 +749,58 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                     className="px-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black">✕</button>
                 </div>
               ) : (
-                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={category} onChange={e => { setCategory(e.target.value); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5(''); setShowAddSub(false); generateVrID(e.target.value, itemList); }}>
+                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={category} onChange={e => { setCategory(e.target.value); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5(''); setAddSubLevel(0); generateVrID(e.target.value, itemList); }}>
                   <option value="">SELECT CATEGORY</option>
                   {categoryOptions.map((c: any, i: number) => <option key={i} value={String(c)}>{String(c)}</option>)}
                 </select>
               )}
             </div>
 
-            {/* SUB 1 — show if options exist, OR category selected */}
-            {category && (
-              <div className="space-y-1">
+            {/* ── Reusable inline-add row ── */}
+            {([
+              { level:1, label:'SUB 1', opts:sub1Options, val:sub1, setter:(v:string)=>{ setSub1(v); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }, show: !!category },
+              { level:2, label:'SUB 2', opts:sub2Options, val:sub2, setter:(v:string)=>{ setSub2(v); setSub3(''); setSub4(''); setSub5(''); }, show: !!category && !!sub1 },
+              { level:3, label:'SUB 3', opts:sub3Options, val:sub3, setter:(v:string)=>{ setSub3(v); setSub4(''); setSub5(''); }, show: !!category && !!sub1 && !!sub2 },
+              { level:4, label:'SUB 4', opts:sub4Options, val:sub4, setter:(v:string)=>{ setSub4(v); setSub5(''); }, show: !!category && !!sub1 && !!sub2 && !!sub3 },
+              { level:5, label:'SUB 5', opts:sub5Options, val:sub5, setter:(v:string)=>{ setSub5(v); }, show: !!category && !!sub1 && !!sub2 && !!sub3 && !!sub4 },
+            ] as const).map(({ level, label, opts, val, setter, show }) => show && (
+              <div key={level} className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] text-slate-500 uppercase font-black">SUB 1</label>
-                  {!showAddSub && (
-                    <button type="button" onClick={() => { setShowAddSub(true); setNewSubInputs({ sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' }); }}
+                  <label className="text-[10px] text-slate-500 uppercase font-black">{label}</label>
+                  {addSubLevel !== level && (
+                    <button type="button" onClick={() => { setAddSubLevel(level); setNewSubInput(''); }}
                       className="text-[9px] text-slate-400 hover:text-slate-950 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg font-black uppercase hover:border-slate-500 transition-all">
-                      + ADD SUB
+                      + ADD
                     </button>
                   )}
                 </div>
-                {showAddSub ? (
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
-                    <p className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Sub Category အသစ်</p>
-                    {(['sub1','sub2','sub3','sub4','sub5'] as const).map((k, idx) => (
-                      <input key={k}
-                        autoFocus={idx===0}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-black uppercase outline-none focus:border-slate-500 text-slate-950 placeholder:text-slate-300"
-                        placeholder={`SUB ${idx+1}${idx===0?' *':''}`}
-                        value={newSubInputs[k]}
-                        onChange={e => setNewSubInputs(prev => ({ ...prev, [k]: e.target.value }))}
-                        onKeyDown={e => { if (e.key==='Escape') setShowAddSub(false); }}
-                      />
-                    ))}
-                    <div className="flex gap-2">
-                      <button type="button" onClick={handleInlineAddSub} disabled={catBusy || !newSubInputs.sub1.trim()}
-                        className="flex-1 bg-slate-950 text-white py-2 rounded-xl text-[10px] font-black disabled:opacity-40">
-                        {catBusy ? '…' : 'SAVE'}
-                      </button>
-                      <button type="button" onClick={() => setShowAddSub(false)}
-                        className="px-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black">CANCEL</button>
-                    </div>
+                {addSubLevel === level ? (
+                  <div className="flex gap-1">
+                    <input autoFocus
+                      className="flex-1 p-2 bg-white border border-slate-400 rounded-xl text-xs font-black uppercase outline-none text-slate-950 placeholder:text-slate-300"
+                      placeholder={`NEW ${label}`}
+                      value={newSubInput}
+                      onChange={e => setNewSubInput(e.target.value)}
+                      onKeyDown={e => { if (e.key==='Enter') handleInlineAddSub(); if (e.key==='Escape') setAddSubLevel(0); }}
+                    />
+                    <button type="button" onClick={handleInlineAddSub} disabled={catBusy || !newSubInput.trim()}
+                      className="px-3 bg-slate-950 text-white rounded-xl text-[10px] font-black disabled:opacity-40">
+                      {catBusy ? '…' : 'SAVE'}
+                    </button>
+                    <button type="button" onClick={() => setAddSubLevel(0)}
+                      className="px-2 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black">✕</button>
                   </div>
-                ) : sub1Options.length > 0 ? (
-                  <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={sub1} onChange={e => { setSub1(e.target.value); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }}>
-                    <option value="">SELECT</option>{sub1Options.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
+                ) : opts.length > 0 ? (
+                  <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500"
+                    value={val} onChange={e => setter(e.target.value)}>
+                    <option value="">SELECT</option>
+                    {opts.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
                   </select>
                 ) : (
-                  <p className="text-[10px] text-slate-300 uppercase tracking-widest py-1">Sub မရှိသေး — + ADD SUB နှိပ်ထည့်ပါ</p>
+                  <p className="text-[10px] text-slate-300 uppercase tracking-widest py-1">Sub မရှိသေး — + ADD နှိပ်ပါ</p>
                 )}
               </div>
-            )}
-
-            {sub2Options.length > 0 && (
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-500 uppercase font-black">SUB 2</label>
-                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={sub2} onChange={e => { setSub2(e.target.value); setSub3(''); setSub4(''); setSub5(''); }}>
-                  <option value="">SELECT</option>{sub2Options.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
-                </select>
-              </div>
-            )}
-            {sub3Options.length > 0 && (
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-500 uppercase font-black">SUB 3</label>
-                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={sub3} onChange={e => { setSub3(e.target.value); setSub4(''); setSub5(''); }}>
-                  <option value="">SELECT</option>{sub3Options.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
-                </select>
-              </div>
-            )}
-            {sub4Options.length > 0 && (
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-500 uppercase font-black">SUB 4</label>
-                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={sub4} onChange={e => { setSub4(e.target.value); setSub5(''); }}>
-                  <option value="">SELECT</option>{sub4Options.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
-                </select>
-              </div>
-            )}
-            {sub5Options.length > 0 && (
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-500 uppercase font-black">SUB 5</label>
-                <select className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs uppercase font-black text-slate-950 focus:border-slate-500" value={sub5} onChange={e => setSub5(e.target.value)}>
-                  <option value="">SELECT</option>{sub5Options.map((o: any, i: number) => <option key={i} value={String(o)}>{String(o)}</option>)}
-                </select>
-              </div>
-            )}
+            ))}
           </div>
 
           {/* Right — Item inputs */}
@@ -855,15 +834,61 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               <input className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400 font-black text-slate-950 placeholder:text-slate-300" placeholder="e.g. TOYOTA, SAMSUNG..." value={currentItem.brand} onChange={e => setCurrentItem({ ...currentItem, brand: e.target.value })}/>
             </div>
 
-            {/* QTY + Rate */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-500 uppercase flex items-center font-black"><Hash size={12} className="mr-1"/> QTY</label>
-                <input type="number" step="any" className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xl text-center text-slate-950 outline-none focus:border-slate-500 font-black" value={currentItem.count} onChange={e => setCurrentItem({ ...currentItem, count: e.target.value })}/>
+            {/* QTY + Rate + Total (auto-calc) */}
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 uppercase flex items-center font-black"><Hash size={12} className="mr-1"/> QTY</label>
+                  <input type="number" step="any" className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xl text-center text-slate-950 outline-none focus:border-slate-500 font-black"
+                    value={currentItem.count}
+                    onChange={e => {
+                      const qty = e.target.value;
+                      const rate = parseFloat(currentItem.cost_piece);
+                      const total = parseFloat(currentItem.cost_total);
+                      let next = { ...currentItem, count: qty };
+                      const q = parseFloat(qty);
+                      if (!isNaN(q) && q > 0) {
+                        if (!isNaN(rate) && rate > 0) next.cost_total = String(Math.round(q * rate));
+                        else if (!isNaN(total) && total > 0) next.cost_piece = String(Math.round(total / q));
+                      }
+                      setCurrentItem(next);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 uppercase flex items-center font-black"><Banknote size={12} className="mr-1"/> RATE</label>
+                  <input type="number" className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xl text-center text-slate-950 outline-none focus:border-slate-500 font-black"
+                    value={currentItem.cost_piece}
+                    onChange={e => {
+                      const rate = e.target.value;
+                      const qty = parseFloat(currentItem.count);
+                      let next = { ...currentItem, cost_piece: rate };
+                      const r = parseFloat(rate);
+                      if (!isNaN(r) && r > 0 && !isNaN(qty) && qty > 0) next.cost_total = String(Math.round(qty * r));
+                      setCurrentItem(next);
+                    }}
+                  />
+                </div>
               </div>
+              {/* TOTAL */}
               <div className="space-y-1">
-                <label className="text-[10px] text-slate-500 uppercase flex items-center font-black"><Banknote size={12} className="mr-1"/> RATE</label>
-                <input type="number" className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-xl text-center text-slate-950 outline-none focus:border-slate-500 font-black" value={currentItem.cost_piece} onChange={e => setCurrentItem({ ...currentItem, cost_piece: e.target.value })}/>
+                <label className="text-[10px] text-slate-500 uppercase flex items-center font-black">💵 TOTAL</label>
+                <input type="number" className="w-full p-4 bg-slate-950 text-white border-0 rounded-2xl text-2xl text-center outline-none font-black placeholder:text-slate-600"
+                  placeholder="0"
+                  value={currentItem.cost_total}
+                  onChange={e => {
+                    const total = e.target.value;
+                    const qty = parseFloat(currentItem.count);
+                    const rate = parseFloat(currentItem.cost_piece);
+                    let next = { ...currentItem, cost_total: total };
+                    const t = parseFloat(total);
+                    if (!isNaN(t) && t > 0) {
+                      if (!isNaN(qty) && qty > 0) next.cost_piece = String(Math.round(t / qty));
+                      else if (!isNaN(rate) && rate > 0) next.count = String(Math.round(t / rate));
+                    }
+                    setCurrentItem(next);
+                  }}
+                />
               </div>
             </div>
 

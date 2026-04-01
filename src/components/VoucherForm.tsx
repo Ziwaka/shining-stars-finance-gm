@@ -117,6 +117,16 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const cropImgRef  = useRef<HTMLImageElement>(null);
   const dragState   = useRef<{handle:string;startX:number;startY:number;startRect:typeof cropRect}|null>(null);
 
+  // Helper: get prefix for a category (case-insensitive)
+  const getPrefixForCategory = (cat: string): string | null => {
+    if (!cat) return null;
+    const lowerCat = cat.toLowerCase();
+    for (const [key, prefix] of Object.entries(config.prefixes)) {
+      if (key.toLowerCase() === lowerCat) return String(prefix);
+    }
+    return null;
+  };
+
   useEffect(() => {
     fetch('/api/gas')
       .then(res => res.json())
@@ -166,7 +176,15 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const sub5Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3 && String(row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean), [sub4, config.categoryList, category, sub1, sub2, sub3]);
 
   const generateVrID = (cat: string, currentBatch: any[]): string => {
-    const prefix = type === 'Cash In' ? 'INC' : (config.prefixes[cat] || 'EXP');
+    // Determine prefix: Cash In always "INC", otherwise lookup from config (case-insensitive)
+    let prefix: string;
+    if (type === 'Cash In') {
+      prefix = 'INC';
+    } else {
+      const mapped = getPrefixForCategory(cat);
+      prefix = mapped || 'EXP';  // fallback to 'EXP' if no mapping
+    }
+
     const lastNum = config.lastSerials[prefix] || 0;
     const inBatchCount = currentBatch.filter(i => String(i.voucherno).startsWith(prefix)).length;
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
@@ -191,26 +209,23 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       });
       const d = await res.json();
       if (d.result === 'saved') {
-        // ── Optimistic: add to local categoryList immediately ──
-        setConfig((prev: any) => ({
-          ...prev,
-          categoryList: [...prev.categoryList, { Category: cat, Sub_1: '', Sub_2: '', Sub_3: '', Sub_4: '', Sub_5: '' }]
-        }));
+        // refresh config silently
+        fetch('/api/gas?force=1').then(r => r.json()).then(data => {
+          setConfig((prev: any) => ({ ...prev, categoryList: data.categoryList || prev.categoryList }));
+        });
         setCategory(cat);
         setNewCatInput('');
         setShowAddCat(false);
-        // Background refresh after delay
-        setTimeout(() => fetch('/api/gas?force=1').then(r => r.json()).then(data => {
-          setConfig((prev: any) => ({ ...prev, categoryList: data.categoryList || prev.categoryList }));
-        }).catch(() => {}), 3000);
       }
     } finally { setCatBusy(false); }
   }
 
   async function handleInlineAddSub() {
     if (!category || !newSubInput.trim() || addSubLevel === 0) return;
+    // Build the full path: use current selections for levels before addSubLevel
     const subs = [sub1, sub2, sub3, sub4, sub5];
     subs[addSubLevel - 1] = newSubInput.trim().toUpperCase();
+    // Clear levels after addSubLevel
     for (let i = addSubLevel; i < 5; i++) subs[i] = '';
     setCatBusy(true);
     try {
@@ -225,14 +240,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       });
       const d = await res.json();
       if (d.result === 'saved') {
-        // ── Optimistic: add to local categoryList immediately ──
-        setConfig((prev: any) => ({
-          ...prev,
-          categoryList: [...prev.categoryList, {
-            Category: category,
-            Sub_1: subs[0], Sub_2: subs[1], Sub_3: subs[2], Sub_4: subs[3], Sub_5: subs[4],
-          }]
-        }));
+        fetch('/api/gas?force=1').then(r => r.json()).then(data => {
+          setConfig((prev: any) => ({ ...prev, categoryList: data.categoryList || prev.categoryList }));
+        });
+        // Auto-select the newly added value
         if (addSubLevel === 1) { setSub1(subs[0]); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }
         if (addSubLevel === 2) { setSub2(subs[1]); setSub3(''); setSub4(''); setSub5(''); }
         if (addSubLevel === 3) { setSub3(subs[2]); setSub4(''); setSub5(''); }
@@ -240,10 +251,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         if (addSubLevel === 5) { setSub5(subs[4]); }
         setNewSubInput('');
         setAddSubLevel(0);
-        // Background refresh after delay
-        setTimeout(() => fetch('/api/gas?force=1').then(r => r.json()).then(data => {
-          setConfig((prev: any) => ({ ...prev, categoryList: data.categoryList || prev.categoryList }));
-        }).catch(() => {}), 3000);
       }
     } finally { setCatBusy(false); }
   }

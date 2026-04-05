@@ -17,15 +17,31 @@ export default function Home() {
   const fetchVouchers = useCallback(async () => {
     setDataLoading(true);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-      const res = await fetch('/api/gas', { signal: controller.signal });
-      clearTimeout(timeout);
+      // ★ Client-side timeout မသုံး — server (route.ts) မှာ 45s timeout + retry ရှိပြီ
+      //   Client က abort လုပ်ရင် server က ဆက်ပြုလုပ်နေသော်လည်း response မပြန်နိုင်
+      const res = await fetch('/api/gas');
+
+      if (!res.ok) {
+        // 503 = GAS timeout/error — data ဆက်ပြသည်၊ spinner ရပ်သည်
+        console.warn('GAS fetch status:', res.status);
+        setDataLoading(false);
+        return;
+      }
+
       const data = await res.json();
+
+      // Error response ဆိုရင်လည်း existing data ကို မဖျက်
+      if (data.error) {
+        console.warn('GAS error:', data.error);
+        setDataLoading(false);
+        return;
+      }
+
       setVouchers(data.vouchers || []);
       if (data.dashboardDefaults) setDashboardDefaults(data.dashboardDefaults);
     } catch (err) {
-      console.error("Data Fetch Error", err);
+      // Network error — existing data ကို ဆက်ပြ
+      console.error('Data Fetch Error:', err);
     } finally {
       setDataLoading(false);
     }
@@ -160,6 +176,19 @@ export default function Home() {
             <Link href="/categories" className="bg-white text-slate-950 border border-slate-200 px-4 py-2.5 rounded-2xl shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2 font-black text-xs">
               <Layers size={14}/> CATEGORIES
             </Link>
+            <Link href="/migrate" className="bg-amber-50 text-amber-800 border border-amber-200 px-4 py-2.5 rounded-2xl shadow-sm hover:bg-amber-100 transition-all flex items-center gap-2 font-black text-xs">
+              ☁️ MIGRATE PHOTOS
+            </Link>
+            {/* Manual Refresh Button */}
+            <button
+              onClick={fetchVouchers}
+              disabled={dataLoading}
+              className="bg-white text-slate-950 border border-slate-200 px-4 py-2.5 rounded-2xl shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2 font-black text-xs disabled:opacity-50"
+              title="Dashboard Refresh"
+            >
+              <RefreshCcw size={14} className={dataLoading ? 'animate-spin text-slate-500' : 'text-slate-600'}/>
+              REFRESH
+            </button>
             <Link href="/entry" className="bg-slate-950 text-white px-5 py-2.5 rounded-2xl shadow-lg hover:bg-slate-800 transition-all flex items-center gap-2 font-black text-xs ml-auto">
               <Plus size={15} strokeWidth={3}/> ADD NEW VOUCHER
             </Link>

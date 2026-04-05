@@ -97,6 +97,34 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const [itemDropdown, setItemDropdown] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
 
+  // ── Edit Voucher Item state ──
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editItem, setEditItem] = useState<any>(null);
+
+  // ── Cloudinary upload state ──
+  const [imageUploading, setImageUploading] = useState(false);
+
+  // ── Upload image to Cloudinary, returns URL (graceful fallback to base64) ──
+  const uploadToCloudinary = async (base64: string): Promise<string> => {
+    if (!base64) return '';
+    try {
+      setImageUploading(true);
+      const res = await fetch('/api/cloudinary', {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ image: base64 }),
+      });
+      if (!res.ok) throw new Error('upload failed');
+      const data = await res.json();
+      return data.url ?? base64;
+    } catch (e) {
+      console.warn('[Cloudinary] fallback to base64:', e);
+      return base64;
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
   // ── Inline Category Add states ──
   const [showAddCat,   setShowAddCat]   = useState(false);
   const [newCatInput,  setNewCatInput]  = useState('');
@@ -392,18 +420,22 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setSubmitStatus('idle');
   };
 
-  const addItem = () => {
+  const addItem = async () => {
     const countNum = parseFloat(currentItem.count) || 0;
     const costNum  = parseFloat(currentItem.cost_piece) || 0;
     const totalFromState = parseFloat(currentItem.cost_total);
     if (!vendor || !currentItem.item_description || countNum <= 0) return alert('REQUIRED: VENDOR, ITEM & QTY');
-    // Use manually entered total if available, otherwise calculate
     const total = !isNaN(totalFromState) && totalFromState > 0
       ? Math.round(totalFromState)
       : Math.round(countNum * costNum);
 
-    // ✅ Vr. No. — batch ထဲ ပထမ item ဆိုရင် generate၊ မဟုတ်ရင် အရင် voucherno ကိုပဲ သုံး
     const vrNo = itemList.length === 0 ? generateVrID(category, itemList) : voucherno;
+
+    // ✅ Upload ပုံကို Cloudinary သို့ — URL ရမှ batch ထည့်သည်
+    // base64 ဆိုရင် upload လုပ်, URL ဆိုရင် (already uploaded) ဒီတိုင်းသုံး
+    const imageValue = image.startsWith('http')
+      ? image
+      : await uploadToCloudinary(image);
 
     const newItem = {
       date, entered_by: enteredBy, account, vendor, type,
@@ -418,7 +450,9 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       note: currentItem.note,
       km: parseFloat(currentItem.km) || 0,
       remark: currentItem.km ? `KM:${currentItem.km}` : '',
-      count: countNum, cost_piece: costNum, cost_total: total, image_data: image, id: Date.now()
+      count: countNum, cost_piece: costNum, cost_total: total,
+      image_data: imageValue,   // Cloudinary URL or base64 fallback
+      id: Date.now()
     };
     setItemList(prev => [...prev, newItem]);
     setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`);
@@ -458,6 +492,11 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       onRefresh();
       // ✅ force=true — cache bypass ဖြင့် fresh lastSerials ရမည်
       await loadConfig(true);
+      // ✅ Auto-reset to idle after 1.5s — New Voucher ကို တန်းဆက်ရိုက်လို့ရမည်
+      setTimeout(() => {
+        setSubmitStatus('idle');
+        resetForm();
+      }, 1500);
     } catch {
       setSubmitStatus('error');
       setTimeout(() => setSubmitStatus('idle'), 3000);
@@ -988,8 +1027,19 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             </div>
 
             {/* ADD TO BATCH */}
-            <button onClick={addItem} className="w-full bg-slate-200 text-slate-950 py-5 rounded-[1.5rem] text-sm hover:bg-slate-300 transition-all flex items-center justify-center uppercase font-black border border-slate-300 shadow-sm">
-              <Plus className="mr-2" size={20} strokeWidth={4}/> ADD TO BATCH
+            <button
+              onClick={addItem}
+              disabled={imageUploading}
+              className={`w-full py-5 rounded-[1.5rem] text-sm transition-all flex items-center justify-center uppercase font-black border shadow-sm ${
+                imageUploading
+                  ? 'bg-amber-50 border-amber-200 text-amber-700 cursor-wait'
+                  : 'bg-slate-200 border-slate-300 text-slate-950 hover:bg-slate-300'
+              }`}
+            >
+              {imageUploading
+                ? <><RefreshCcw className="mr-2 animate-spin" size={16}/> UPLOADING PHOTO...</>
+                : <><Plus className="mr-2" size={20} strokeWidth={4}/> ADD TO BATCH</>
+              }
             </button>
 
           </div>
@@ -1000,25 +1050,149 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       <div className="lg:col-span-4 flex flex-col bg-slate-50 border-l border-slate-200 font-black">
         <div className="bg-slate-200 p-5 text-slate-950 flex justify-between items-center font-black border-b border-slate-300">
           <span className="text-[10px] tracking-[0.3em] font-black">BATCH ({itemList.length})</span>
+          {itemList.length > 0 && (
+            <span className="text-[9px] text-slate-500 tracking-widest">✏️ EDIT နှိပ်ပြင်နိုင်</span>
+          )}
         </div>
         <div className="flex-grow p-5 space-y-4 overflow-y-auto max-h-[500px] font-black">
           {itemList.map(i => (
-            <div key={i.id} className={`bg-white p-4 rounded-2xl shadow-sm border border-slate-200 border-l-[6px] ${i.type === 'Cash In' ? 'border-l-emerald-400' : 'border-l-rose-400'} font-black`}>
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <p className="text-[10px] text-slate-500">{i.voucherno}</p>
-                  <p className="text-xs leading-tight font-black text-slate-950">{i.item_description}</p>
-                  <p className="text-[8px] text-slate-600 uppercase">[{i.entered_by} • {i.account}]</p>
+            <div key={i.id} className={`bg-white rounded-2xl shadow-sm border border-slate-200 border-l-[6px] ${i.type === 'Cash In' ? 'border-l-emerald-400' : 'border-l-rose-400'} font-black overflow-hidden`}>
+              {/* Item header */}
+              <div className="p-4">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1 flex-1 min-w-0 mr-2">
+                    <p className="text-[10px] text-slate-500">{i.voucherno}</p>
+                    <p className="text-xs leading-tight font-black text-slate-950 truncate">{i.item_description}</p>
+                    <p className="text-[8px] text-slate-600 uppercase">[{i.entered_by} • {i.account}]</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Edit button */}
+                    <button
+                      onClick={() => {
+                        setEditingItemId(i.id);
+                        setEditItem({ ...i });
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      title="Edit"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all">
+                      <Trash2 size={13}/>
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => setItemList(itemList.filter(x => x.id !== i.id))} className="text-rose-500 p-1"><Trash2 size={14}/></button>
+                {i.note && <p className="text-[9px] text-slate-500 mt-2">NOTE: {i.note}</p>}
+                {i.km > 0 && <p className="text-[9px] text-blue-600 mt-1">🛣 {i.km.toLocaleString()} km</p>}
+                {i.image_data && <p className="text-[9px] text-emerald-600 mt-1">📷 PHOTO ATTACHED</p>}
+                <div className="flex justify-between items-end mt-3">
+                  <p className="text-[9px] text-slate-500">{i.count} × {Number(i.cost_piece).toLocaleString()} MMK</p>
+                  <p className="text-sm font-black">{Number(i.cost_total).toLocaleString()}</p>
+                </div>
               </div>
-              {i.note && <p className="text-[9px] text-slate-500 mt-2">NOTE: {i.note}</p>}
-              {i.km > 0 && <p className="text-[9px] text-blue-600 mt-1">🛣 {i.km.toLocaleString()} km</p>}
-              {i.image_data && <p className="text-[9px] text-emerald-600 mt-1">📷 PHOTO ATTACHED</p>}
-              <div className="flex justify-between items-end mt-4">
-                <p className="text-[9px] text-slate-500">{i.count} X {i.cost_piece.toLocaleString()} MMK</p>
-                <p className="text-sm font-black">{i.cost_total.toLocaleString()}</p>
-              </div>
+
+              {/* ── Inline Edit Panel ── */}
+              {editingItemId === i.id && editItem && (
+                <div className="border-t-2 border-blue-200 bg-blue-50 p-4 space-y-3">
+                  <p className="text-[9px] text-blue-600 uppercase tracking-widest font-black flex items-center gap-1">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Voucher ပြင်ဆင်ရန်
+                  </p>
+
+                  {/* Item description */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-blue-500 uppercase font-black">Item Description</label>
+                    <input
+                      className="w-full p-2.5 bg-white border border-blue-200 rounded-xl text-xs font-black outline-none focus:border-blue-500 text-slate-950"
+                      value={editItem.item_description}
+                      onChange={e => setEditItem((prev: any) => ({ ...prev, item_description: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* QTY + Rate */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-blue-500 uppercase font-black">QTY</label>
+                      <input type="number" step="any"
+                        className="w-full p-2.5 bg-white border border-blue-200 rounded-xl text-xs font-black outline-none focus:border-blue-500 text-center text-slate-950"
+                        value={editItem.count}
+                        onChange={e => {
+                          const qty = parseFloat(e.target.value) || 0;
+                          const rate = parseFloat(editItem.cost_piece) || 0;
+                          setEditItem((prev: any) => ({
+                            ...prev,
+                            count: e.target.value,
+                            cost_total: rate > 0 ? Math.round(qty * rate) : prev.cost_total,
+                          }));
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-blue-500 uppercase font-black">Rate</label>
+                      <input type="number"
+                        className="w-full p-2.5 bg-white border border-blue-200 rounded-xl text-xs font-black outline-none focus:border-blue-500 text-center text-slate-950"
+                        value={editItem.cost_piece}
+                        onChange={e => {
+                          const rate = parseFloat(e.target.value) || 0;
+                          const qty  = parseFloat(editItem.count) || 0;
+                          setEditItem((prev: any) => ({
+                            ...prev,
+                            cost_piece: e.target.value,
+                            cost_total: qty > 0 ? Math.round(qty * rate) : prev.cost_total,
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Total */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-blue-500 uppercase font-black">Total (MMK)</label>
+                    <input type="number"
+                      className="w-full p-3 bg-slate-950 text-white border-0 rounded-xl text-lg text-center font-black outline-none"
+                      value={editItem.cost_total}
+                      onChange={e => setEditItem((prev: any) => ({ ...prev, cost_total: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </div>
+
+                  {/* Note */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-blue-500 uppercase font-black">Note</label>
+                    <input
+                      className="w-full p-2.5 bg-white border border-blue-200 rounded-xl text-xs font-black outline-none focus:border-blue-500 text-slate-950"
+                      value={editItem.note || ''}
+                      onChange={e => setEditItem((prev: any) => ({ ...prev, note: e.target.value }))}
+                      placeholder="Note..."
+                    />
+                  </div>
+
+                  {/* Save / Cancel */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setItemList(itemList.map(x => x.id === editingItemId ? { ...editItem } : x));
+                        setEditingItemId(null);
+                        setEditItem(null);
+                      }}
+                      className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 hover:bg-blue-700 transition-colors"
+                    >
+                      <Save size={12}/> SAVE EDIT
+                    </button>
+                    <button
+                      onClick={() => { setEditingItemId(null); setEditItem(null); }}
+                      className="px-4 bg-white text-slate-600 border border-slate-200 rounded-xl text-[11px] font-black hover:bg-slate-100 transition-colors"
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1028,15 +1202,16 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
             <span className="text-slate-950 text-4xl font-black">{itemList.reduce((s, x) => s + x.cost_total, 0).toLocaleString()}</span>
           </div>
           <button onClick={handleFinalSubmit} disabled={submitStatus === 'processing' || itemList.length === 0}
-            className={`w-full py-5 rounded-2xl text-xs transition-all flex items-center justify-center font-black ${submitStatus === 'idle' || submitStatus === 'success' ? 'bg-slate-950 text-white shadow-md hover:bg-slate-800' : submitStatus === 'processing' ? 'bg-slate-300 text-slate-950' : 'bg-rose-100 text-rose-900 border border-rose-300'}`}>
+            className={`w-full py-5 rounded-2xl text-xs transition-all flex items-center justify-center font-black ${
+              submitStatus === 'success' ? 'bg-emerald-600 text-white' :
+              submitStatus === 'idle' ? 'bg-slate-950 text-white shadow-md hover:bg-slate-800' :
+              submitStatus === 'processing' ? 'bg-slate-300 text-slate-950' :
+              'bg-rose-100 text-rose-900 border border-rose-300'
+            }`}>
             {submitStatus === 'processing' && <><RefreshCcw className="mr-2 animate-spin" size={18} strokeWidth={3}/> PROCESSING...</>}
-            {submitStatus !== 'processing' && <><Save className="mr-2" size={18} strokeWidth={3}/> POST TO CLOUD</>}
+            {submitStatus === 'success' && <><Check className="mr-2" size={18} strokeWidth={3}/> SAVED! NEW VOUCHER LOADING...</>}
+            {(submitStatus === 'idle' || submitStatus === 'error') && <><Save className="mr-2" size={18} strokeWidth={3}/> POST TO CLOUD</>}
           </button>
-          {submitStatus === 'success' && (
-            <button onClick={resetForm} className="w-full py-4 rounded-2xl text-xs bg-white border-2 border-slate-950 text-slate-950 hover:bg-slate-950 hover:text-white transition-all flex items-center justify-center font-black gap-2">
-              <Plus size={16} strokeWidth={3}/> NEW VOUCHER
-            </button>
-          )}
         </div>
       </div>
 

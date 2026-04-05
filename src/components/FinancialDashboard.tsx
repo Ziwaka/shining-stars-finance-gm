@@ -2,8 +2,8 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2, ShieldAlert, ChevronDown, RefreshCcw, Wallet, Trophy, Download } from 'lucide-react';
-import { deleteFromSheet } from '@/lib/api';
+import { Image as ImageIcon, X, TrendingUp, Layers, Printer, BarChart3, ListChecks, Filter, AlertTriangle, Trash2, ShieldAlert, ChevronDown, RefreshCcw, Wallet, Trophy, Download, Pencil, Save, Check } from 'lucide-react';
+import { deleteFromSheet, updateVoucher } from '@/lib/api';
 import type { Voucher, VoucherRaw, DashboardAnalytics } from '@/lib/types';
 
 const COLORS = ['#f43f5e','#fb923c','#facc15','#4ade80','#34d399','#22d3ee','#818cf8','#c084fc','#f472b6','#94a3b8','#60a5fa','#a78bfa'];
@@ -52,6 +52,19 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const [selectedImg, setSelectedImg] = useState<string|null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open:false, voucherno:'', confirmInput:'', loading:false });
+
+  // ── Edit Voucher Modal state ──────────────────────────────────
+  const [editModal, setEditModal] = useState<{
+    open: boolean;
+    voucher: typeof normalizedData[0] | null;
+    saving: boolean;
+    imgUploading: boolean;
+  }>({ open:false, voucher:null, saving:false, imgUploading:false });
+  const [editForm, setEditForm] = useState({
+    date:'', item:'', note:'', cost_total:0,
+    category:'', sub1:'', sub2:'', sub3:'', sub4:'', sub5:'',
+    vendor:'', image_data:'',
+  });
   const [activePreset, setActivePreset] = useState('');
   const [openCats, setOpenCats] = useState<Record<string,boolean>>({});
 
@@ -199,6 +212,66 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   },[filtered]);
 
   const handleDelete  = (voucherno:string)=>setDeleteModal({open:true,voucherno,confirmInput:'',loading:false});
+
+  // ── Open Edit Modal ───────────────────────────────────────────
+  const openEditModal = (v: typeof normalizedData[0]) => {
+    setEditForm({
+      date: v.date, item: v.item, note: v.note,
+      cost_total: v.cost_total,
+      category: v.category, sub1: v.sub1, sub2: v.sub2,
+      sub3: v.sub3, sub4: v.sub4, sub5: v.sub5,
+      vendor: v.vendor, image_data: v.image_data,
+    });
+    setEditModal({ open:true, voucher:v, saving:false, imgUploading:false });
+  };
+
+  // ── Upload new photo to Cloudinary ───────────────────────────
+  const uploadEditPhoto = async (file: File) => {
+    setEditModal(m => ({ ...m, imgUploading:true }));
+    try {
+      const reader = new FileReader();
+      const base64: string = await new Promise((res, rej) => {
+        reader.onload = e => res(e.target!.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      const r = await fetch('/api/cloudinary', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ image: base64 }),
+      });
+      const d = await r.json();
+      setEditForm(f => ({ ...f, image_data: d.url ?? base64 }));
+    } catch { /* keep old image */ }
+    finally { setEditModal(m => ({ ...m, imgUploading:false })); }
+  };
+
+  // ── Save edited voucher ───────────────────────────────────────
+  const handleSaveEdit = async () => {
+    if (!editModal.voucher) return;
+    setEditModal(m => ({ ...m, saving:true }));
+    try {
+      await updateVoucher({
+        voucherno  : editModal.voucher.voucherno,
+        date       : editForm.date,
+        item       : editForm.item,
+        note       : editForm.note,
+        cost_total : editForm.cost_total,
+        category   : editForm.category,
+        sub1       : editForm.sub1,
+        sub2       : editForm.sub2,
+        sub3       : editForm.sub3,
+        sub4       : editForm.sub4,
+        sub5       : editForm.sub5,
+        vendor     : editForm.vendor,
+        image_data : editForm.image_data,
+      });
+      setEditModal({ open:false, voucher:null, saving:false, imgUploading:false });
+      if (onRefresh) onRefresh();
+    } catch {
+      setEditModal(m => ({ ...m, saving:false }));
+      alert('Save မအောင်မြင်ပါ — ထပ်ကြိုးစားပါ');
+    }
+  };
   const confirmDelete = async()=>{
     if(deleteModal.confirmInput!==deleteModal.voucherno) return;
     setDeleteModal(m=>({...m,loading:true}));
@@ -523,6 +596,9 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
                                 {v.type==='Cash In'?'+':'-'}{fmt(v.cost_total)}
                               </span>
                               <div className="flex gap-1.5 print:hidden">
+                                <button onClick={()=>openEditModal(v)} className="p-1.5 bg-blue-50 text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-600 hover:text-white transition-all" title="Edit">
+                                  <Pencil size={12}/>
+                                </button>
                                 <button onClick={()=>handleDelete(v.voucherno)} className="p-1.5 bg-rose-50 text-rose-500 border border-rose-200 rounded-lg hover:bg-rose-600 hover:text-white transition-all">
                                   <Trash2 size={12}/>
                                 </button>
@@ -546,6 +622,137 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         <div className="fixed inset-0 bg-slate-900/90 z-[9999] flex items-center justify-center p-6 backdrop-blur-sm print:hidden" onClick={()=>setSelectedImg(null)}>
           <button className="absolute top-6 right-6 text-white"><X size={28}/></button>
           <img src={selectedImg} className="max-w-full max-h-full rounded-2xl border-4 border-white shadow-xl" alt="Proof"/>
+        </div>
+      )}
+
+      {/* ── Edit Voucher Modal ── */}
+      {editModal.open && editModal.voucher && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm print:hidden"
+          onClick={()=>{ if(!editModal.saving) setEditModal(m=>({...m,open:false})); }}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
+            onClick={e=>e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="bg-slate-950 text-white px-5 py-4 flex items-center justify-between shrink-0">
+              <div>
+                <p className="text-[9px] text-slate-400 tracking-widest uppercase">Edit Voucher</p>
+                <p className="text-sm font-black tracking-widest">{editModal.voucher.voucherno}</p>
+              </div>
+              <button onClick={()=>setEditModal(m=>({...m,open:false}))} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
+                <X size={16}/>
+              </button>
+            </div>
+
+            {/* Scrollable form */}
+            <div className="overflow-y-auto flex-1 p-5 space-y-4">
+
+              {/* Date */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Date</label>
+                <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950"
+                  value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))}/>
+              </div>
+
+              {/* Vendor */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Vendor / Supplier</label>
+                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950 uppercase"
+                  value={editForm.vendor} onChange={e=>setEditForm(f=>({...f,vendor:e.target.value}))}/>
+              </div>
+
+              {/* Category path */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Category</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    {label:'Category', key:'category' as const},
+                    {label:'Sub 1',    key:'sub1'     as const},
+                    {label:'Sub 2',    key:'sub2'     as const},
+                    {label:'Sub 3',    key:'sub3'     as const},
+                  ].map(({label,key})=>(
+                    <div key={key} className="space-y-0.5">
+                      <p className="text-[8px] text-slate-400 uppercase">{label}</p>
+                      <input className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-slate-500 text-slate-950 uppercase"
+                        value={editForm[key]} onChange={e=>setEditForm(f=>({...f,[key]:e.target.value.toUpperCase()}))}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Item description */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Item Description</label>
+                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950"
+                  value={editForm.item} onChange={e=>setEditForm(f=>({...f,item:e.target.value}))}/>
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Amount (MMK)</label>
+                <input type="number" className="w-full p-3 bg-slate-950 text-white border-0 rounded-xl text-xl text-center font-black outline-none"
+                  value={editForm.cost_total} onChange={e=>setEditForm(f=>({...f,cost_total:parseFloat(e.target.value)||0}))}/>
+              </div>
+
+              {/* Note */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Note</label>
+                <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-slate-500 text-slate-950 resize-none h-16 normal-case"
+                  value={editForm.note} onChange={e=>setEditForm(f=>({...f,note:e.target.value}))}/>
+              </div>
+
+              {/* Photo */}
+              <div className="space-y-2">
+                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Photo</label>
+                {editForm.image_data ? (
+                  <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={editForm.image_data} alt="voucher" className="w-full max-h-40 object-contain rounded-xl border border-slate-200"/>
+                    <div className="absolute top-2 right-2 flex gap-1.5">
+                      <label className="cursor-pointer p-1.5 bg-amber-100 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-200 transition-colors">
+                        <Pencil size={12}/>
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadEditPhoto(f); e.target.value=''; }}/>
+                      </label>
+                      <button onClick={()=>setEditForm(f=>({...f,image_data:''}))}
+                        className="p-1.5 bg-rose-100 text-rose-500 border border-rose-200 rounded-lg hover:bg-rose-200 transition-colors">
+                        <X size={12}/>
+                      </button>
+                    </div>
+                    {editModal.imgUploading && (
+                      <div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center">
+                        <RefreshCcw size={20} className="animate-spin text-slate-400"/>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-slate-400 transition-colors text-slate-400 text-[11px] font-black uppercase">
+                    {editModal.imgUploading
+                      ? <><RefreshCcw size={14} className="animate-spin"/> Uploading...</>
+                      : <><ImageIcon size={14}/> ပုံ ပြောင်းမည်</>
+                    }
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadEditPhoto(f); e.target.value=''; }}/>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Footer buttons */}
+            <div className="px-5 pb-5 pt-3 flex gap-3 shrink-0 border-t border-slate-100">
+              <button onClick={handleSaveEdit}
+                disabled={editModal.saving || editModal.imgUploading}
+                className="flex-1 bg-slate-950 text-white py-3.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-800 transition-colors">
+                {editModal.saving
+                  ? <><RefreshCcw size={13} className="animate-spin"/> Saving...</>
+                  : <><Save size={13}/> Save Changes</>
+                }
+              </button>
+              <button onClick={()=>setEditModal(m=>({...m,open:false}))} disabled={editModal.saving}
+                className="flex-1 bg-slate-100 text-slate-600 py-3.5 rounded-2xl text-xs font-black hover:bg-slate-200 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Search, Phone, MapPin, Briefcase, RefreshCcw, Users, ChevronRight, Filter, TrendingUp, Calendar, ArrowUpDown } from 'lucide-react';
+import { ArrowLeft, Search, Phone, MapPin, Briefcase, RefreshCcw, Users, ChevronRight, ChevronDown, Filter, TrendingUp, Calendar, ArrowUpDown, X, Receipt, Tag, FolderOpen } from 'lucide-react';
 
 interface Supplier {
   name: string;
@@ -18,11 +18,134 @@ interface VoucherRaw {
   date?: string; Date?: string;
   type?: string; Type?: string;
   account?: string; Account?: string;
+  category?: string; Category?: string;
+  sub_1?: string; Sub_1?: string;
+  item_description?: string; item?: string;
+  voucher_no?: string; voucherno?: string;
 }
 
-type SortKey = 'name' | 'spend' | 'recent';
+type SortKey = 'usage' | 'spend' | 'name' | 'recent';
 
 const fmt = (n: number) => n.toLocaleString();
+
+// ── Transaction History Modal ─────────────────────────────────
+function TxHistoryModal({ vendorName, vouchers, onClose }: { vendorName: string; vouchers: VoucherRaw[]; onClose: () => void }) {
+  const txList = useMemo(() => {
+    const grouped: Record<string, { date: string; category: string; item: string; amount: number; type: string }[]> = {};
+    vouchers.forEach(v => {
+      const name = (v.vendor || v.Vendor || '').toString().trim();
+      if (name !== vendorName) return;
+      const typeStr = (v.type || v.Type || '').toString().trim().toLowerCase();
+      const amt  = Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
+      const date = (v.date || v.Date || '').toString().split('T')[0];
+      const cat  = (v.category || v.Category || '').toString().toUpperCase();
+      const item = (v.item_description || v.item || '').toString();
+      const vrNo = (v.voucher_no || v.voucherno || '').toString();
+      if (!grouped[vrNo]) grouped[vrNo] = [];
+      grouped[vrNo].push({ date, category: cat, item, amount: amt, type: typeStr });
+    });
+    return Object.entries(grouped)
+      .map(([vrNo, items]) => ({ vrNo, date: items[0].date, category: items[0].category, items }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [vendorName, vouchers]);
+
+  const total = useMemo(() => txList.flatMap(t => t.items).reduce((s, i) => s + i.amount, 0), [txList]);
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/80 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-6 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="bg-slate-950 text-white px-5 py-4 rounded-t-3xl sm:rounded-t-3xl flex items-center justify-between shrink-0">
+          <div>
+            <p className="text-[9px] text-slate-400 tracking-widest uppercase">Transaction History</p>
+            <p className="text-sm font-black uppercase truncate max-w-[220px]">{vendorName}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-[9px] text-slate-400">Total Spend</p>
+              <p className="text-base font-black text-rose-400">{fmt(total)} MMK</p>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
+              <X size={16}/>
+            </button>
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+          {txList.length === 0 ? (
+            <div className="py-16 text-center text-slate-300 text-sm uppercase tracking-widest">မှတ်တမ်းမရှိ</div>
+          ) : (
+            txList.map((tx, i) => (
+              <div key={i} className="px-5 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Receipt size={11} className="text-slate-400"/>
+                    <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{tx.vrNo || '—'}</span>
+                    <span className="text-[10px] text-slate-400">{tx.date}</span>
+                  </div>
+                  {tx.category && (
+                    <span className="text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase">{tx.category}</span>
+                  )}
+                </div>
+                {tx.items.map((item, j) => (
+                  <div key={j} className="flex items-center justify-between pl-4">
+                    <p className="text-[11px] font-black text-slate-700 truncate max-w-[220px]">{item.item || '—'}</p>
+                    <span className={`text-xs font-black ${item.type === 'cash in' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {item.type === 'cash in' ? '+' : '-'}{fmt(item.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Mini spend-by-month bar chart ────────────────────────────
+function SpendTrendMini({ vendorName, vouchers }: { vendorName: string; vouchers: VoucherRaw[] }) {
+  const monthlySpend = useMemo(() => {
+    const m: Record<string, number> = {};
+    vouchers.forEach(v => {
+      const name = (v.vendor || v.Vendor || '').toString().trim();
+      if (name !== vendorName) return;
+      const typeStr = (v.type || v.Type || '').toString().trim().toLowerCase();
+      if (typeStr === 'cash in') return;
+      const amt  = Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
+      const date = (v.date || v.Date || '').toString().split('T')[0];
+      const month = date.slice(0, 7);
+      if (!month) return;
+      m[month] = (m[month] || 0) + amt;
+    });
+    return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
+  }, [vendorName, vouchers]);
+
+  if (monthlySpend.length < 2) return null;
+  const max = Math.max(...monthlySpend.map(([, v]) => v));
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[9px] text-slate-400 tracking-widest uppercase flex items-center gap-1">
+        <TrendingUp size={10}/> လစဉ် ကုန်ကျ
+      </p>
+      <div className="flex items-end gap-1 h-10">
+        {monthlySpend.map(([month, amt]) => (
+          <div key={month} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+            <div className="w-full bg-rose-300 rounded-sm transition-all group-hover:bg-rose-500"
+              style={{ height: `${max > 0 ? Math.max(4, Math.round((amt / max) * 32)) : 4}px` }}/>
+            <span className="text-[8px] text-slate-400 font-black">{month.slice(5)}</span>
+            <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-slate-950 text-white text-[9px] px-2 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+              {fmt(amt)} MMK
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -30,8 +153,14 @@ export default function SuppliersPage() {
   const [loading,   setLoading]   = useState(true);
   const [search,    setSearch]    = useState('');
   const [selected,  setSelected]  = useState<string | null>(null);
-  const [sortBy,    setSortBy]    = useState<SortKey>('name');
-  const [serviceFilter, setServiceFilter] = useState('');
+  const [sortBy,    setSortBy]    = useState<SortKey>('usage');
+  const [txModal,   setTxModal]   = useState<string | null>(null);
+
+  // Hierarchical filter state
+  const [filterCat,  setFilterCat]  = useState('');
+  const [filterSub,  setFilterSub]  = useState('');
+  const [filterItem, setFilterItem] = useState('');
+  const [showFilter, setShowFilter] = useState(false);
 
   useEffect(() => {
     fetch('/api/gas')
@@ -44,7 +173,22 @@ export default function SuppliersPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  // ── Spend & last-transaction per supplier (from voucher data) ──
+  // ── Usage count (number of distinct vouchers) per supplier ──
+  const usageMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    const seen: Record<string, Set<string>> = {};
+    (vouchers || []).forEach(v => {
+      const name = (v.vendor || v.Vendor || '').toString().trim();
+      if (!name) return;
+      const vrNo = (v.voucher_no || v.voucherno || Math.random().toString()).toString();
+      if (!seen[name]) seen[name] = new Set();
+      seen[name].add(vrNo);
+      m[name] = seen[name].size;
+    });
+    return m;
+  }, [vouchers]);
+
+  // ── Spend & last-transaction per supplier ──
   const spendMap = useMemo(() => {
     const m: Record<string, { total: number; lastDate: string }> = {};
     (vouchers || []).forEach(v => {
@@ -61,16 +205,66 @@ export default function SuppliersPage() {
     return m;
   }, [vouchers]);
 
-  // ── All service tags (for filter) ──
-  const allServices = useMemo(() => {
+  // ── Hierarchical filter options ──
+  const allCategories = useMemo(() => {
     const s = new Set<string>();
-    suppliers.forEach(sup => {
-      if (sup.service) sup.service.split(',').forEach(sv => { const t = sv.trim(); if (t) s.add(t.toUpperCase()); });
+    vouchers.forEach(v => {
+      const name = (v.vendor || v.Vendor || '').toString().trim();
+      if (!name) return;
+      const cat = (v.category || v.Category || '').toString().trim().toUpperCase();
+      if (cat) s.add(cat);
     });
     return Array.from(s).sort();
-  }, [suppliers]);
+  }, [vouchers]);
 
-  // ── Filter + sort ──
+  const subOptions = useMemo(() => {
+    if (!filterCat) return [];
+    const s = new Set<string>();
+    vouchers.forEach(v => {
+      const name = (v.vendor || v.Vendor || '').toString().trim();
+      if (!name) return;
+      const cat = (v.category || v.Category || '').toString().trim().toUpperCase();
+      if (cat !== filterCat) return;
+      const sub = (v.sub_1 || v.Sub_1 || '').toString().trim().toUpperCase();
+      if (sub) s.add(sub);
+    });
+    return Array.from(s).sort();
+  }, [vouchers, filterCat]);
+
+  const itemOptions = useMemo(() => {
+    if (!filterCat) return [];
+    const s = new Set<string>();
+    vouchers.forEach(v => {
+      const name = (v.vendor || v.Vendor || '').toString().trim();
+      if (!name) return;
+      const cat = (v.category || v.Category || '').toString().trim().toUpperCase();
+      const sub = (v.sub_1 || v.Sub_1 || '').toString().trim().toUpperCase();
+      if (filterCat && cat !== filterCat) return;
+      if (filterSub && sub !== filterSub) return;
+      const item = (v.item_description || v.item || '').toString().trim();
+      if (item) s.add(item);
+    });
+    return Array.from(s).sort().slice(0, 30);
+  }, [vouchers, filterCat, filterSub]);
+
+  // ── Suppliers who have transactions matching current filter ──
+  const filteredSupplierNames = useMemo(() => {
+    if (!filterCat && !filterSub && !filterItem) return null; // null = no filter
+    const s = new Set<string>();
+    vouchers.forEach(v => {
+      const name = (v.vendor || v.Vendor || '').toString().trim();
+      if (!name) return;
+      const cat  = (v.category || v.Category || '').toString().trim().toUpperCase();
+      const sub  = (v.sub_1 || v.Sub_1 || '').toString().trim().toUpperCase();
+      const item = (v.item_description || v.item || '').toString().trim();
+      if (filterCat  && cat  !== filterCat)  return;
+      if (filterSub  && sub  !== filterSub)  return;
+      if (filterItem && !item.toLowerCase().includes(filterItem.toLowerCase())) return;
+      s.add(name);
+    });
+    return s;
+  }, [vouchers, filterCat, filterSub, filterItem]);
+
   const filtered = useMemo(() => {
     let list = suppliers.filter(s => {
       const q = search.toLowerCase();
@@ -78,28 +272,31 @@ export default function SuppliersPage() {
         || s.name?.toLowerCase().includes(q)
         || [s.phone, s.phone1, s.phone2, s.phone3].some(p => p?.includes(search))
         || s.service?.toLowerCase().includes(q);
-      const matchService = !serviceFilter
-        || s.service?.toUpperCase().includes(serviceFilter);
-      return matchSearch && matchService;
+      const matchFilter = filteredSupplierNames === null || filteredSupplierNames.has(s.name);
+      return matchSearch && matchFilter;
     });
 
     list = [...list].sort((a, b) => {
-      if (sortBy === 'name')   return a.name.localeCompare(b.name);
+      if (sortBy === 'usage')  return (usageMap[b.name]  || 0) - (usageMap[a.name]  || 0);
       if (sortBy === 'spend')  return (spendMap[b.name]?.total  || 0) - (spendMap[a.name]?.total  || 0);
+      if (sortBy === 'name')   return a.name.localeCompare(b.name);
       if (sortBy === 'recent') return (spendMap[b.name]?.lastDate || '').localeCompare(spendMap[a.name]?.lastDate || '');
       return 0;
     });
     return list;
-  }, [search, serviceFilter, sortBy, suppliers, spendMap]);
+  }, [search, filteredSupplierNames, sortBy, suppliers, spendMap, usageMap]);
 
   const totalSupplierSpend = useMemo(() =>
     Object.values(spendMap).reduce((s, v) => s + v.total, 0), [spendMap]);
 
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-    { key: 'name',   label: 'နာမည်' },
+    { key: 'usage',  label: 'အသုံးများ' },
     { key: 'spend',  label: 'ကုန်ကျမှု' },
     { key: 'recent', label: 'နောက်ဆုံး' },
+    { key: 'name',   label: 'နာမည်' },
   ];
+
+  const hasFilter = filterCat || filterSub || filterItem;
 
   return (
     <main className="min-h-screen bg-slate-100 font-black text-slate-950">
@@ -146,38 +343,119 @@ export default function SuppliersPage() {
           />
         </div>
 
-        {/* Service filter chips */}
-        {allServices.length > 0 && (
-          <div className="flex gap-2 flex-wrap items-center">
-            <Filter size={12} className="text-slate-400 shrink-0"/>
-            <button
-              onClick={() => setServiceFilter('')}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-black border transition-all ${!serviceFilter ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
-            >
-              ALL
-            </button>
-            {allServices.map(sv => (
-              <button
-                key={sv}
-                onClick={() => setServiceFilter(serviceFilter === sv ? '' : sv)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-black border transition-all ${serviceFilter === sv ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
-              >
-                {sv}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Hierarchical Filter */}
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setShowFilter(!showFilter)}
+            className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${hasFilter ? 'bg-blue-50 border-b border-blue-100' : 'hover:bg-slate-50'}`}
+          >
+            <div className="flex items-center gap-2">
+              <Filter size={13} className={hasFilter ? 'text-blue-600' : 'text-slate-400'}/>
+              <span className={`text-[11px] font-black uppercase tracking-widest ${hasFilter ? 'text-blue-700' : 'text-slate-500'}`}>
+                {hasFilter
+                  ? [filterCat, filterSub, filterItem].filter(Boolean).join(' › ')
+                  : 'FILTER BY CATEGORY / SUBCATEGORY / ITEM'}
+              </span>
+              {hasFilter && (
+                <span className="bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black">ON</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {hasFilter && (
+                <button
+                  onClick={e => { e.stopPropagation(); setFilterCat(''); setFilterSub(''); setFilterItem(''); }}
+                  className="text-[10px] text-slate-400 hover:text-rose-500 border border-slate-200 px-2 py-1 rounded-lg font-black"
+                >
+                  CLEAR
+                </button>
+              )}
+              <ChevronDown size={14} className={`text-slate-400 transition-transform ${showFilter ? 'rotate-180' : ''}`}/>
+            </div>
+          </button>
+
+          {showFilter && (
+            <div className="p-4 space-y-3 border-t border-slate-100">
+              {/* Category */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-1">
+                  <FolderOpen size={10}/> Category
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => { setFilterCat(''); setFilterSub(''); setFilterItem(''); }}
+                    className={`px-3 py-1.5 rounded-full text-[11px] font-black border transition-all ${!filterCat ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+                  >ALL</button>
+                  {allCategories.map(cat => (
+                    <button key={cat} onClick={() => { setFilterCat(filterCat === cat ? '' : cat); setFilterSub(''); setFilterItem(''); }}
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-black border transition-all ${filterCat === cat ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sub Category */}
+              {filterCat && subOptions.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 uppercase font-black tracking-widest flex items-center gap-1">
+                    <Tag size={10}/> Sub Category
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button onClick={() => { setFilterSub(''); setFilterItem(''); }}
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-black border transition-all ${!filterSub ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                      ALL
+                    </button>
+                    {subOptions.map(sub => (
+                      <button key={sub} onClick={() => { setFilterSub(filterSub === sub ? '' : sub); setFilterItem(''); }}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-black border transition-all ${filterSub === sub ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                        {sub}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Item search */}
+              {filterCat && (
+                <div className="space-y-1">
+                  <label className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Item</label>
+                  <div className="relative">
+                    <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                    <input
+                      className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] outline-none focus:border-slate-400 font-black text-slate-950"
+                      placeholder="Item ရှာပါ..."
+                      value={filterItem}
+                      onChange={e => setFilterItem(e.target.value)}
+                    />
+                    {filterItem && (
+                      <button onClick={() => setFilterItem('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500">
+                        <X size={12}/>
+                      </button>
+                    )}
+                  </div>
+                  {itemOptions.length > 0 && filterItem && (
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm max-h-32 overflow-y-auto mt-1">
+                      {itemOptions.filter(i => i.toLowerCase().includes(filterItem.toLowerCase())).slice(0, 10).map(item => (
+                        <button key={item} onClick={() => setFilterItem(item)}
+                          className="w-full text-left px-3 py-2 text-[11px] font-black text-slate-700 hover:bg-slate-50 border-b border-slate-100 last:border-0 truncate">
+                          {item}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Sort */}
         <div className="flex items-center gap-2">
           <ArrowUpDown size={12} className="text-slate-400 shrink-0"/>
           <span className="text-[10px] text-slate-400 tracking-widest uppercase">SORT:</span>
           {SORT_OPTIONS.map(o => (
-            <button
-              key={o.key}
-              onClick={() => setSortBy(o.key)}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all ${sortBy === o.key ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
-            >
+            <button key={o.key} onClick={() => setSortBy(o.key)}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all ${sortBy === o.key ? 'bg-slate-950 text-white border-slate-950' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}>
               {o.label}
             </button>
           ))}
@@ -189,30 +467,38 @@ export default function SuppliersPage() {
             <RefreshCcw className="animate-spin text-slate-300" size={28}/>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-slate-300 text-sm uppercase tracking-widest">
-            မတွေ့ပါ
-          </div>
+          <div className="text-center py-20 text-slate-300 text-sm uppercase tracking-widest">မတွေ့ပါ</div>
         ) : (
           <div className="space-y-2">
             {filtered.map((s, i) => {
               const spend    = spendMap[s.name];
+              const usage    = usageMap[s.name] || 0;
               const isOpen   = selected === s.name;
               const spendPct = totalSupplierSpend > 0 && spend ? Math.round((spend.total / totalSupplierSpend) * 100) : 0;
 
               return (
-                <div
-                  key={i}
-                  className="bg-white border border-slate-200 rounded-2xl overflow-hidden cursor-pointer hover:border-slate-400 transition-all"
-                  onClick={() => setSelected(isOpen ? null : s.name)}
-                >
+                <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden cursor-pointer hover:border-slate-400 transition-all"
+                  onClick={() => setSelected(isOpen ? null : s.name)}>
+
                   {/* Card header */}
                   <div className="flex items-center justify-between p-4">
                     <div className="space-y-0.5 min-w-0 flex-1 mr-3">
-                      <p className="text-sm font-black uppercase truncate">{s.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-black uppercase truncate">{s.name}</p>
+                        {/* Usage badge — most used suppliers */}
+                        {sortBy === 'usage' && usage > 0 && (
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${
+                            i === 0 ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                            i < 3  ? 'bg-slate-100 text-slate-600 border border-slate-200' :
+                                     'bg-slate-50 text-slate-400 border border-slate-100'
+                          }`}>
+                            #{i+1} · {usage}x
+                          </span>
+                        )}
+                      </div>
                       {s.service && (
                         <p className="text-[10px] text-slate-400 uppercase truncate">{s.service}</p>
                       )}
-                      {/* Spend summary inline */}
                       {spend && (
                         <div className="flex items-center gap-2 mt-1">
                           <div className="h-1 flex-1 bg-slate-100 rounded-full overflow-hidden max-w-[80px]">
@@ -223,6 +509,16 @@ export default function SuppliersPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {/* Quick TX history button */}
+                      {spend && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setTxModal(s.name); }}
+                          className="p-1.5 bg-slate-100 hover:bg-slate-950 hover:text-white text-slate-500 rounded-lg transition-all"
+                          title="Transaction History"
+                        >
+                          <Receipt size={13}/>
+                        </button>
+                      )}
                       {spend?.lastDate && (
                         <span className="text-[9px] text-slate-400 hidden sm:block">{spend.lastDate}</span>
                       )}
@@ -233,6 +529,14 @@ export default function SuppliersPage() {
                   {/* Expanded details */}
                   {isOpen && (
                     <div className="px-4 pb-4 pt-0 border-t border-slate-100 space-y-3 mt-0">
+
+                      {/* TX History button */}
+                      <button
+                        onClick={e => { e.stopPropagation(); setTxModal(s.name); }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-950 text-white rounded-xl text-[11px] font-black uppercase hover:bg-slate-800 transition-colors mt-3"
+                      >
+                        <Receipt size={13}/> Transaction History ကြည့်ရန်
+                      </button>
 
                       {/* Spend detail card */}
                       {spend && (
@@ -259,12 +563,7 @@ export default function SuppliersPage() {
                           <Phone size={13} className="text-slate-400 shrink-0 mt-1"/>
                           <div className="space-y-1">
                             {[s.phone1 || s.phone, s.phone2, s.phone3].filter(Boolean).map((p, pi) => (
-                              <a
-                                key={pi}
-                                href={`tel:${p}`}
-                                onClick={e => e.stopPropagation()}
-                                className="flex items-center gap-2 group"
-                              >
+                              <a key={pi} href={`tel:${p}`} onClick={e => e.stopPropagation()} className="flex items-center gap-2 group">
                                 <span className="font-black text-slate-950 text-sm group-hover:text-blue-600 transition-colors">{p}</span>
                                 <span className="text-[10px] text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">ဖုန်းဆက်</span>
                               </a>
@@ -295,10 +594,8 @@ export default function SuppliersPage() {
                         </div>
                       )}
 
-                      {/* Spend trend from vouchers */}
-                      {spend && (
-                        <SpendTrendMini vendorName={s.name} vouchers={vouchers}/>
-                      )}
+                      {/* Spend trend */}
+                      {spend && (<SpendTrendMini vendorName={s.name} vouchers={vouchers}/>)}
                     </div>
                   )}
                 </div>
@@ -307,52 +604,15 @@ export default function SuppliersPage() {
           </div>
         )}
       </div>
+
+      {/* Transaction History Modal */}
+      {txModal && (
+        <TxHistoryModal
+          vendorName={txModal}
+          vouchers={vouchers}
+          onClose={() => setTxModal(null)}
+        />
+      )}
     </main>
-  );
-}
-
-// ── Mini spend-by-month bar chart (pure CSS, no recharts) ────
-function SpendTrendMini({ vendorName, vouchers }: { vendorName: string; vouchers: VoucherRaw[] }) {
-  const monthlySpend = useMemo(() => {
-    const m: Record<string, number> = {};
-    vouchers.forEach(v => {
-      const name = (v.vendor || v.Vendor || '').toString().trim();
-      if (name !== vendorName) return;
-      const typeStr = (v.type || v.Type || '').toString().trim().toLowerCase();
-      if (typeStr === 'cash in') return;
-      const amt  = Math.round(Number(v['cost_(total)'] || v.cost_total || 0));
-      const date = (v.date || v.Date || '').toString().split('T')[0];
-      const month = date.slice(0, 7);
-      if (!month) return;
-      m[month] = (m[month] || 0) + amt;
-    });
-    return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
-  }, [vendorName, vouchers]);
-
-  if (monthlySpend.length < 2) return null;
-
-  const max = Math.max(...monthlySpend.map(([, v]) => v));
-
-  return (
-    <div className="space-y-1.5">
-      <p className="text-[9px] text-slate-400 tracking-widest uppercase flex items-center gap-1">
-        <TrendingUp size={10}/> လစဉ် ကုန်ကျ
-      </p>
-      <div className="flex items-end gap-1 h-10">
-        {monthlySpend.map(([month, amt]) => (
-          <div key={month} className="flex-1 flex flex-col items-center gap-0.5 group relative">
-            <div
-              className="w-full bg-rose-300 rounded-sm transition-all group-hover:bg-rose-500"
-              style={{ height: `${max > 0 ? Math.max(4, Math.round((amt / max) * 32)) : 4}px` }}
-            />
-            <span className="text-[8px] text-slate-400 font-black">{month.slice(5)}</span>
-            {/* Tooltip */}
-            <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-slate-950 text-white text-[9px] px-2 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-              {fmt(amt)} MMK
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }

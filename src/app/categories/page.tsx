@@ -79,7 +79,7 @@ export default function CategoriesPage() {
   useEffect(loadData, []);
 
   const grouped = useMemo(() => groupRows(catList), [catList]);
-  const categories = useMemo(() => Object.keys(grouped).sort(), [grouped]);
+  const categories = useMemo(() => Object.keys(grouped).filter(Boolean).sort(), [grouped]);
   const subCount = (cat: string) => grouped[cat]?.filter(r => r.sub1).length ?? 0;
 
   async function manageCat(payload: object) {

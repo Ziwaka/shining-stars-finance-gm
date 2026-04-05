@@ -153,8 +153,8 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     return {
       totalIn, totalOut, balance:totalIn-totalOut,
       categories: Object.entries(catGroup).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value),
-      dailyTrends:  Object.values(dailyMap).sort((a,b)=>a.date.localeCompare(b.date)),
-      monthlyTrends: Object.values(monthMap).sort((a,b)=>a.month.localeCompare(b.month)),
+      dailyTrends:  Object.values(dailyMap).sort((a,b)=>(a.date||'').localeCompare(b.date||'')),
+      monthlyTrends: Object.values(monthMap).sort((a,b)=>(a.month||'').localeCompare(b.month||'')),
     };
   },[filtered]);
 
@@ -191,7 +191,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
       });
       return {
         name:catName, total:catV.reduce((s,v)=>s+v.cost_total,0),
-        data:Object.values(dateMap).sort((a,b)=>(a.date as string).localeCompare(b.date as string)),
+        data:Object.values(dateMap).sort((a,b)=>((a.date as string)||'').localeCompare((b.date as string)||'')),
         subKeys:Array.from(subKeysSet),
       };
     });
@@ -200,7 +200,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const groupedAuditLog = useMemo(()=>{
     type VrEntry = { date:string; type:string; vendor:string; entered_by:string; account:string; items:Voucher[] };
     const g: Record<string, Record<string, VrEntry>> = {};
-    const sorted=[...filtered].sort((a,b)=>b.date.localeCompare(a.date)||b.voucherno.localeCompare(a.voucherno));
+    const sorted=[...filtered].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.voucherno||'').localeCompare(a.voucherno||''));
     sorted.forEach(v=>{
       if(!g[v.category]) g[v.category]={};
       if(!g[v.category][v.voucherno]){
@@ -299,7 +299,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   );
 
   const TrendChart=({data,xKey}:{data:{date?:string;month?:string;income:number;expense:number}[];xKey:string})=>(
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height={160} minHeight={160}>
       <BarChart data={data} barGap={2} margin={{left:-20,right:4,top:4,bottom:0}}>
         <CartesianGrid vertical={false} stroke="#f1f5f9"/>
         <XAxis dataKey={xKey} tick={{fontSize:7,fontWeight:900,fill:'#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={d=>xKey==='month'?d.slice(5)+' လ':d.slice(5)}/>
@@ -448,7 +448,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
       {analytics.dailyTrends.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><TrendingUp size={13}/> DAILY TREND</h3>
-          <div className="h-[160px]"><TrendChart data={analytics.dailyTrends} xKey="date"/></div>
+          <div style={{width:"100%",height:160}}><TrendChart data={analytics.dailyTrends} xKey="date"/></div>
           <div className="flex gap-4 mt-2 justify-center">
             <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>IN</span>
             <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block"/>OUT</span>
@@ -460,7 +460,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
       {analytics.monthlyTrends.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><TrendingUp size={13}/> MONTHLY TREND</h3>
-          <div className="h-[160px]"><TrendChart data={analytics.monthlyTrends} xKey="month"/></div>
+          <div style={{width:"100%",height:160}}><TrendChart data={analytics.monthlyTrends} xKey="month"/></div>
           <div className="flex gap-4 mt-2 justify-center">
             <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>IN</span>
             <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block"/>OUT</span>
@@ -474,7 +474,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><Layers size={13}/> EXPENSE ALLOCATION</h3>
           <div className="flex gap-3 items-start">
             <div className="w-[120px] h-[120px] shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width={120} height={120}>
                 <PieChart>
                   <Pie data={analytics.categories} innerRadius={35} outerRadius={55} paddingAngle={3} dataKey="value" stroke="none">
                     {analytics.categories.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
@@ -508,8 +508,8 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
                 <h4 className="text-[11px] text-slate-500 tracking-widest font-black">{catChart.name}</h4>
                 <span className="text-xs font-black">{fmt(catChart.total)} MMK</span>
               </div>
-              <div className="h-[180px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div style={{width:"100%",height:180}}>
+                <ResponsiveContainer width="100%" height={180} minHeight={180}>
                   <BarChart data={catChart.data} margin={{left:-20,right:4,top:4,bottom:0}}>
                     <CartesianGrid vertical={false} stroke="#f1f5f9"/>
                     <XAxis dataKey="date" tick={{fontSize:7,fontWeight:900,fill:'#94a3b8'}} tickLine={false} axisLine={false} tickFormatter={d=>String(d).slice(5)}/>

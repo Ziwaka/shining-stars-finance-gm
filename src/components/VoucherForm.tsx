@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Trash2, Save, RefreshCcw, Camera, Upload, ScanLine, Zap, RotateCcw, ArrowUpRight, ArrowDownLeft, MessageSquare, Hash, Banknote, Search, User, Wallet, BellRing, Phone, MapPin, Briefcase, X, Check } from 'lucide-react';
 
-/* ─── AUTO ENHANCE ─────────────────────────────────────────── */
+// ─── AUTO ENHANCE ───────────────────────────────────────────
 function autoEnhance(src: ImageData): ImageData {
   const d = new Uint8ClampedArray(src.data);
   const minC = [255, 255, 255], maxC = [0, 0, 0];
@@ -24,7 +24,7 @@ function autoEnhance(src: ImageData): ImageData {
   return new ImageData(d,width,height);
 }
 
-/* ─── AUTO CROP ─────────────────────────────────────────────── */
+// ─── AUTO CROP ───────────────────────────────────────────────
 function autoCrop(imageData: ImageData): {top:number;bottom:number;left:number;right:number}|null {
   const {data,width,height}=imageData;
   const gray=new Float32Array(width*height);
@@ -42,8 +42,10 @@ function autoCrop(imageData: ImageData): {top:number;bottom:number;left:number;r
   return {top:Math.max(0,top-m),bottom:Math.min(height,bottom+m),left:Math.max(0,left-m),right:Math.min(width,right+m)};
 }
 
+// ─── CLAMP ───────────────────────────────────────────────────
 const clamp = (v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
 
+// ─── PROCESS PIPELINE ────────────────────────────────────────
 function processImagePipeline(src: string, onDone: (r:string)=>void) {
   const img=new Image();
   img.onload=()=>{
@@ -61,6 +63,7 @@ function processImagePipeline(src: string, onDone: (r:string)=>void) {
 }
 
 export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
+  // ── STATE DECLARATIONS ─────────────────────────────────────────
   const [type, setType] = useState<'Cash Out' | 'Cash In'>('Cash Out');
   const [vendor, setVendor] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -114,20 +117,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const cropImgRef = useRef<HTMLImageElement>(null);
   const dragState = useRef<{handle:string;startX:number;startY:number;startRect:typeof cropRect}|null>(null);
 
-  // Debug state
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [showDebug, setShowDebug] = useState(false);
-
   // Hardcoded fallback prefixes
   const hardcodedPrefixes: Record<string, string> = {
-    'OFFICE': 'OF',
-    'HOSTEL': 'HT',
-    'FERRY': 'FR',
-    'CEREMONY': 'CM',
-    'FUEL': 'FUEL',
-    'MAINTENANCE': 'MT',
-    'SALARY': 'SL',
-    'UTILITY': 'UT',
+    'OFFICE': 'OF', 'HOSTEL': 'HT', 'FERRY': 'FR', 'CEREMONY': 'CM',
+    'FUEL': 'FUEL', 'MAINTENANCE': 'MT', 'SALARY': 'SL', 'UTILITY': 'UT',
   };
 
   const getPrefixForCategory = (cat: string): string | null => {
@@ -136,8 +129,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     for (const [key, prefix] of Object.entries(config.prefixes)) {
       if (key.trim().toUpperCase() === upperCat) return String(prefix).toUpperCase();
     }
-    if (hardcodedPrefixes[upperCat]) return hardcodedPrefixes[upperCat];
-    return null;
+    return hardcodedPrefixes[upperCat] || null;
   };
 
   const getLastSerial = (prefix: string): number => {
@@ -150,9 +142,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
 
   const generateVrID = (cat: string, currentBatch: any[]): string => {
     let prefix: string;
-    if (type === 'Cash In') {
-      prefix = 'INC';
-    } else {
+    if (type === 'Cash In') prefix = 'INC';
+    else {
       const mapped = getPrefixForCategory(cat);
       prefix = mapped || 'EXP';
     }
@@ -162,7 +153,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
     const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
     const newId = `${prefix}-${month}-${nextNum}`;
-    console.log(`[VrID] type:${type} cat:${cat} → ${newId}`);
+    console.log('[VrID] Generated:', newId);
     return newId;
   };
 
@@ -174,15 +165,13 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     }
   }, [category, type, date, itemList.length]);
 
-  // Load config and debug
+  // Load config
   useEffect(() => {
     fetch('/api/gas')
       .then(res => res.json())
       .then(data => {
-        console.log('[Config] FULL RESPONSE:', data);
-        setDebugInfo(data);
         setConfig({
-          categoryList: data.categoryList || data.tree || [],
+          categoryList: data.categoryList || [],
           prefixes: data.prefixes || {},
           lastSerials: data.lastSerials || {},
           suppliers: data.suppliers || [],
@@ -196,12 +185,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           setAccount(gm ? String(gm) : String(data.accounts[0]));
         }
       })
-      .catch(err => {
-        console.error('Failed to fetch config:', err);
-        setDebugInfo({ error: err.message });
-      });
+      .catch(err => console.error('Failed to fetch config:', err));
   }, []);
 
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (supplierRef.current && !supplierRef.current.contains(e.target as Node)) setSupplierDropdown(false);
@@ -228,15 +215,16 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const sub4Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3).map((row: any) => String(row.Sub_4 || row.sub4 || '')))).filter(Boolean), [sub3, config.categoryList, category, sub1, sub2]);
   const sub5Options = useMemo<any[]>(() => Array.from(new Set(config.categoryList.filter((row: any) => String(row.Category || row.category) === category && String(row.Sub_1 || row.sub1) === sub1 && String(row.Sub_2 || row.sub2) === sub2 && String(row.Sub_3 || row.sub3) === sub3 && String(row.Sub_4 || row.sub4) === sub4).map((row: any) => String(row.Sub_5 || row.sub5 || '')))).filter(Boolean), [sub4, config.categoryList, category, sub1, sub2, sub3]);
 
+  // ── Category inline add ───────────────────────────────────────
   async function handleInlineAddCat() {
     const cat = newCatInput.trim().toUpperCase();
     if (!cat) return;
     setCatBusy(true);
     try {
       const res = await fetch('/api/gas', {
-        method: 'POST',
+        method : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action:'manageCat', subAction:'add', category:cat, sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' }),
+        body   : JSON.stringify({ action:'manageCat', subAction:'add', category:cat, sub1:'', sub2:'', sub3:'', sub4:'', sub5:'' }),
       });
       const d = await res.json();
       if (d.result === 'saved') {
@@ -258,9 +246,9 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setCatBusy(true);
     try {
       const res = await fetch('/api/gas', {
-        method: 'POST',
+        method : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body   : JSON.stringify({
           action:'manageCat', subAction:'add',
           category,
           sub1: subs[0], sub2: subs[1], sub3: subs[2], sub4: subs[3], sub5: subs[4],
@@ -282,6 +270,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     } finally { setCatBusy(false); }
   }
 
+  // ── Supplier edit modal ──────────────────────────────────────
   const openEditModal = (supplier: any) => {
     const services = supplier.service ? supplier.service.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
     setEditingSupplier(supplier);
@@ -307,6 +296,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     }
   };
 
+  // ── Camera & crop helpers ────────────────────────────────────
   const openCamera = async () => {
     try {
       const ms = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:3840}, height:{ideal:2160} } });
@@ -355,6 +345,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     };
     reader.readAsDataURL(file); e.target.value='';
   };
+
   const rafRef = useRef<number>(0);
   const onCropPointerDown = (e: React.PointerEvent, handle: string) => {
     e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
@@ -378,6 +369,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     });
   };
   const onCropPointerUp = () => { dragState.current=null; cancelAnimationFrame(rafRef.current); };
+
   const applyCrop = () => {
     setCropMode(false);
     setScanProcessing(true); setScanProgress('✂️ Cropping...');
@@ -401,6 +393,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     };
     img.src=rawSrc;
   };
+
   const resetForm = () => {
     setVendor(''); setSupplierSearch(''); setSelectedSupplier(null);
     setCategory(''); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
@@ -408,6 +401,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setItemSearch(''); setImage(''); setVoucherno('');
     setSubmitStatus('idle');
   };
+
   const uploadToCloudinary = async (base64: string): Promise<string> => {
     if (!base64) return '';
     try {
@@ -427,6 +421,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       setImageUploading(false);
     }
   };
+
+  // ─── ADD ITEM (with both voucherno and voucher_no) ────────────
   const addItem = async () => {
     const countNum = parseFloat(currentItem.count) || 0;
     const costNum  = parseFloat(currentItem.cost_piece) || 0;
@@ -435,11 +431,28 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const total = !isNaN(totalFromState) && totalFromState > 0
       ? Math.round(totalFromState)
       : Math.round(countNum * costNum);
-    const vrNo = itemList.length === 0 ? generateVrID(category, itemList) : voucherno;
+
+    let vrNo = voucherno;
+    if (itemList.length === 0) {
+      if (!category) {
+        alert('Please select a category first');
+        return;
+      }
+      vrNo = generateVrID(category, []);
+      setVoucherno(vrNo);
+    } else {
+      vrNo = voucherno;
+    }
+    if (!vrNo) {
+      alert('Voucher ID generation failed');
+      return;
+    }
+
     const imageValue = image.startsWith('http') ? image : await uploadToCloudinary(image);
     const newItem = {
       date, entered_by: enteredBy, account, vendor, type,
       voucherno: vrNo,
+      voucher_no: vrNo,   // ensure GAS can map to column
       vendor_phone: selectedSupplier?.phone1 || selectedSupplier?.phone || '',
       vendor_address: selectedSupplier?.address || '',
       vendor_service: selectedSupplier?.service || '',
@@ -452,18 +465,20 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       image_data: imageValue,
       id: Date.now()
     };
+    console.log('[addItem] New item:', newItem);
     setItemList(prev => [...prev, newItem]);
-    setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH`);
+    setToastMsg(`+ ${total.toLocaleString()} MMK ADDED TO BATCH (${vrNo})`);
     setTimeout(() => setToastMsg(''), 3000);
     setCurrentItem({ item_description: '', brand: '', count: '', cost_piece: '', cost_total: '', note: '', km: '' });
     setItemSearch('');
     setImage('');
   };
+
   const loadConfig = (force = false) => fetch('/api/gas?t=' + Date.now() + (force ? '&force=1' : ''))
     .then(res => res.json())
     .then(data => {
       setConfig({
-        categoryList: data.categoryList || data.tree || [],
+        categoryList: data.categoryList || [],
         prefixes: data.prefixes || {},
         lastSerials: data.lastSerials || {},
         suppliers: data.suppliers || [],
@@ -471,35 +486,46 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
         users: data.users || [],
         accounts: data.accounts || [],
       });
-    })
-    .catch(err => console.error('Failed to fetch config:', err));
+    });
+
+  // ─── FINAL SUBMIT ────────────────────────────────────────────
   const handleFinalSubmit = async () => {
     if (itemList.length === 0 || submitStatus === 'processing') return;
     setSubmitStatus('processing');
     try {
-      await fetch('/api/gas', {
+      const payload = { action: 'sendVoucher', items: itemList };
+      console.log('[Submit] Sending payload:', JSON.stringify(payload, null, 2));
+      const res = await fetch('/api/gas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sendVoucher', items: itemList }),
+        body: JSON.stringify(payload),
       });
-      setSubmitStatus('success');
-      setItemList([]);
-      setVoucherno('');
-      onRefresh();
-      await loadConfig(true);
-      setTimeout(() => {
-        setSubmitStatus('idle');
-        resetForm();
-      }, 1500);
-    } catch {
+      const data = await res.json();
+      console.log('[Submit] Response:', data);
+      if (data.result === 'saved' || data.result === 'ok') {
+        setSubmitStatus('success');
+        setItemList([]);
+        setVoucherno('');
+        if (onRefresh) onRefresh();
+        await loadConfig(true);
+        setTimeout(() => {
+          setSubmitStatus('idle');
+          resetForm();
+        }, 1500);
+      } else {
+        throw new Error(data.msg || 'Save failed');
+      }
+    } catch (err) {
+      console.error('[Submit] Error:', err);
       setSubmitStatus('error');
       setTimeout(() => setSubmitStatus('idle'), 3000);
     }
   };
 
+  // ────────────── JSX (Full UI) ─────────────────────────────────
   return (
     <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950">
-      {/* Crop Modal */}
+      {/* ── CROP MODAL ── */}
       {cropMode && (
         <div className="fixed inset-0 z-[300] bg-black flex flex-col select-none">
           <div className="bg-black px-4 py-3 flex items-center justify-between border-b border-white/10">
@@ -540,7 +566,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </div>
         </div>
       )}
-      {/* Camera Modal */}
+
+      {/* ── CAMERA MODAL ── */}
       {cameraActive && (
         <div className="fixed inset-0 z-[300] bg-black flex flex-col">
           <div className="relative flex-1 overflow-hidden">
@@ -561,14 +588,18 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </div>
         </div>
       )}
+
+      {/* Toast message */}
       {toastMsg && (
         <div className="absolute top-4 right-4 bg-emerald-50 border border-emerald-200 text-slate-950 p-4 rounded-xl shadow-lg flex items-center gap-3 z-50 animate-bounce font-black">
           <BellRing size={20} className="text-emerald-600"/>
           {toastMsg}
         </div>
       )}
-      {/* LEFT PANEL */}
+
+      {/* ── LEFT PANEL (Entry Form) ── */}
       <div className="lg:col-span-8 p-6 space-y-6 border-r border-slate-200 font-black">
+        {/* Type / User / Account */}
         <div className="flex flex-wrap items-center gap-4 bg-slate-50 border border-slate-200 p-2 rounded-2xl w-fit font-black">
           <div className="flex">
             <button onClick={() => { setType('Cash Out'); setVoucherno(''); }} className={`flex items-center px-6 py-2 rounded-xl transition-all font-black ${type === 'Cash Out' ? 'bg-white border border-slate-300 shadow-sm text-slate-950' : 'text-slate-400'}`}><ArrowDownLeft size={16} className="mr-2"/> CASH OUT</button>
@@ -578,7 +609,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           <div className="flex items-center gap-2 px-2"><User size={16} className="text-slate-500"/><select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={enteredBy} onChange={e => { setEnteredBy(e.target.value); if (submitStatus === 'success') setSubmitStatus('idle'); }}>{config.users?.map((u: any, i: number) => <option key={i} value={String(u)}>{String(u)}</option>)}</select></div>
           <div className="flex items-center gap-2 px-2 border-l-2 border-slate-300 pl-4"><Wallet size={16} className="text-slate-500"/><select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={account} onChange={e => { setAccount(e.target.value); if (submitStatus === 'success') setSubmitStatus('idle'); }}>{config.accounts?.map((a: any, i: number) => <option key={i} value={String(a)}>{String(a)}</option>)}</select></div>
         </div>
+
+        {/* Supplier / Date / Voucher ID */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-200 font-black">
+          {/* Supplier */}
           <div className="space-y-2 font-black" ref={supplierRef}>
             <label className="text-[10px] text-slate-500 tracking-widest font-black">SUPPLIER</label>
             <div className="relative">
@@ -638,11 +672,17 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               </div>
             )}
           </div>
+          {/* Date */}
           <div className="space-y-1 font-black"><label className="text-[10px] text-slate-500 tracking-widest font-black">DATE</label><input type="date" className="w-full bg-white border border-slate-300 p-3 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950" value={date} onChange={e => setDate(e.target.value)}/></div>
+          {/* Voucher ID */}
           <div className="space-y-1 font-black"><label className="text-[10px] text-slate-500 tracking-widest font-black">VOUCHER ID</label><div className="flex items-center bg-white border border-slate-300 rounded-xl px-3 h-[46px] font-black"><span className="text-slate-950 text-sm flex-grow font-black">{voucherno || 'ID AUTO'}</span><RefreshCcw size={16} className="text-slate-400 cursor-pointer hover:text-slate-950" onClick={() => { if (category) { const newId = generateVrID(category, itemList); setVoucherno(newId); } }}/></div></div>
         </div>
+
+        {/* Category + Item inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-black">
+          {/* Left: Category & Subs */}
           <div className="space-y-4 font-black">
+            {/* CATEGORY */}
             <div className="space-y-1">
               <div className="flex items-center justify-between"><label className="text-[10px] text-slate-500 uppercase font-black">CATEGORY</label>{!showAddCat && (<button type="button" onClick={() => { setShowAddCat(true); setNewCatInput(''); }} className="text-[9px] text-slate-400 hover:text-slate-950 border border-dashed border-slate-300 px-2 py-0.5 rounded-lg font-black uppercase hover:border-slate-500 transition-all">+ ADD</button>)}</div>
               {showAddCat ? (
@@ -658,6 +698,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                 </select>
               )}
             </div>
+            {/* Sub 1-5 */}
             {([
               { level:1, label:'SUB 1', opts:sub1Options, val:sub1, setter:(v:string)=>{ setSub1(v); setSub2(''); setSub3(''); setSub4(''); setSub5(''); }, show: !!category },
               { level:2, label:'SUB 2', opts:sub2Options, val:sub2, setter:(v:string)=>{ setSub2(v); setSub3(''); setSub4(''); setSub5(''); }, show: !!category && !!sub1 },
@@ -684,6 +725,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
               </div>
             ))}
           </div>
+
+          {/* Right: Item details */}
           <div className="space-y-4 font-black">
             <div className="space-y-1" ref={itemRef}><label className="text-[10px] text-slate-500 uppercase font-black">ITEM DESCRIPTION</label><div className="relative"><input className="w-full p-4 bg-white border border-slate-300 rounded-2xl text-sm outline-none focus:border-slate-500 font-black text-slate-950" placeholder="DETAILS" value={itemSearch} onChange={e => { setItemSearch(e.target.value); setCurrentItem({ ...currentItem, item_description: e.target.value }); setItemDropdown(true); }} onFocus={() => { if (itemSearch) setItemDropdown(true); }}/>{itemDropdown && filteredItems.length > 0 && (<div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-40 overflow-y-auto">{filteredItems.map((item: string, idx: number) => (<div key={idx} className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer text-xs font-black text-slate-950 uppercase border-b border-slate-100 last:border-0" onMouseDown={() => { setItemSearch(item); setCurrentItem({ ...currentItem, item_description: item }); setItemDropdown(false); }}>{item}</div>))}</div>)}</div></div>
             <div className="space-y-1"><label className="text-[10px] text-slate-500 uppercase flex items-center gap-1 font-black">BRAND <span className="text-slate-300 normal-case font-normal">(optional)</span></label><input className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-400 font-black text-slate-950 placeholder:text-slate-300" placeholder="e.g. TOYOTA, SAMSUNG..." value={currentItem.brand} onChange={e => setCurrentItem({ ...currentItem, brand: e.target.value })}/></div>
@@ -708,6 +751,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </div>
         </div>
       </div>
+
+      {/* ── RIGHT PANEL (Batch) ── */}
       <div className="lg:col-span-4 flex flex-col bg-slate-50 border-l border-slate-200 font-black">
         <div className="bg-slate-200 p-5 text-slate-950 flex justify-between items-center font-black border-b border-slate-300"><span className="text-[10px] tracking-[0.3em] font-black">BATCH ({itemList.length})</span>{itemList.length > 0 && <span className="text-[9px] text-slate-500 tracking-widest">✏️ EDIT နှိပ်ပြင်နိုင်</span>}</div>
         <div className="flex-grow p-5 space-y-4 overflow-y-auto max-h-[500px] font-black">
@@ -736,6 +781,8 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </button>
         </div>
       </div>
+
+      {/* ── EDIT SUPPLIER MODAL ── */}
       {showEditModal && editingSupplier && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
@@ -751,15 +798,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </div>
         </div>
       )}
-      {/* Debug Panel */}
-      <div className="col-span-12 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[10px] font-mono mx-6">
-        <button onClick={() => setShowDebug(!showDebug)} className="text-amber-700 underline font-black">🛠️ Debug Info (ပြဿနာရှိမှ နှိပ်ပါ)</button>
-        {showDebug && debugInfo && (
-          <pre className="mt-2 whitespace-pre-wrap text-slate-700 max-h-60 overflow-auto text-[9px]">
-            {JSON.stringify(debugInfo, null, 2)}
-          </pre>
-        )}
-      </div>
     </div>
   );
 }

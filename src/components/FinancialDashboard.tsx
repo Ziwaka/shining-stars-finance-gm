@@ -79,10 +79,12 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     setIsRefreshing(true); await onRefresh(); setTimeout(()=>setIsRefreshing(false),1000);
   };
 
+  // Fix: Use type assertion to access income/Income safely
   const normalizedData = useMemo<Voucher[]>(() => (vouchers||[]).map((v: VoucherRaw) => {
     const cleanDate = (v.date||v.Date||'').toString().split('T')[0];
     const rawCost   = v['cost_(total)']||v.cost_total||v.Cost_Total||0;
-    const rawIncome = v.income||v.Income||0;
+    // Use type assertion to bypass TypeScript error
+    const rawIncome = (v as any).income || (v as any).Income || 0;
     const typeStr   = (v.type||v.Type||'Cash Out').toString().trim();
     const isCashIn  = typeStr.toLowerCase()==='cash in';
     const amount    = isCashIn ? Math.round(Number(rawIncome)||Number(rawCost)||0) : Math.round(Number(rawCost)||0);
@@ -121,7 +123,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     return dashboardDefaults.account || gm || '';
   },[accountOptions, dashboardDefaults.account]);
 
-  // '' → use default,  ALL_ACCOUNTS → show all accounts combined
   const activeAccount = filter.account === '' ? defaultAccount : (filter.account === ALL_ACCOUNTS ? '' : filter.account);
   const isAllAccounts = filter.account === ALL_ACCOUNTS;
 
@@ -153,19 +154,17 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     return {
       totalIn, totalOut, balance:totalIn-totalOut,
       categories: Object.entries(catGroup).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value),
-      dailyTrends:  Object.values(dailyMap).sort((a,b)=>(a.date||'').localeCompare(b.date||'')),
-      monthlyTrends: Object.values(monthMap).sort((a,b)=>(a.month||'').localeCompare(b.month||'')),
+      dailyTrends:  Object.values(dailyMap).sort((a,b)=>a.date.localeCompare(b.date)),
+      monthlyTrends: Object.values(monthMap).sort((a,b)=>a.month.localeCompare(b.month)),
     };
   },[filtered]);
 
-  // Top 5 vendors by spend
   const topVendors = useMemo(()=>{
     const g: Record<string,number>={};
     filtered.filter(v=>v.type==='Cash Out'&&v.vendor).forEach(v=>{g[v.vendor]=(g[v.vendor]||0)+v.cost_total;});
     return Object.entries(g).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value).slice(0,5);
   },[filtered]);
 
-  // Per-account summary for ALL mode
   const accountSummary = useMemo(()=>{
     if(!isAllAccounts) return [];
     const g: Record<string,{acc:string;in:number;out:number}>={};
@@ -191,7 +190,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
       });
       return {
         name:catName, total:catV.reduce((s,v)=>s+v.cost_total,0),
-        data:Object.values(dateMap).sort((a,b)=>((a.date as string)||'').localeCompare((b.date as string)||'')),
+        data:Object.values(dateMap).sort((a,b)=>(a.date as string).localeCompare(b.date as string)),
         subKeys:Array.from(subKeysSet),
       };
     });
@@ -200,7 +199,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
   const groupedAuditLog = useMemo(()=>{
     type VrEntry = { date:string; type:string; vendor:string; entered_by:string; account:string; items:Voucher[] };
     const g: Record<string, Record<string, VrEntry>> = {};
-    const sorted=[...filtered].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.voucherno||'').localeCompare(a.voucherno||''));
+    const sorted=[...filtered].sort((a,b)=>b.date.localeCompare(a.date)||b.voucherno.localeCompare(a.voucherno));
     sorted.forEach(v=>{
       if(!g[v.category]) g[v.category]={};
       if(!g[v.category][v.voucherno]){
@@ -213,7 +212,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
 
   const handleDelete  = (voucherno:string)=>setDeleteModal({open:true,voucherno,confirmInput:'',loading:false});
 
-  // ── Open Edit Modal ───────────────────────────────────────────
   const openEditModal = (v: typeof normalizedData[0]) => {
     setEditForm({
       date: v.date, item: v.item, note: v.note,
@@ -225,7 +223,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     setEditModal({ open:true, voucher:v, saving:false, imgUploading:false });
   };
 
-  // ── Upload new photo to Cloudinary ───────────────────────────
   const uploadEditPhoto = async (file: File) => {
     setEditModal(m => ({ ...m, imgUploading:true }));
     try {
@@ -245,7 +242,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
     finally { setEditModal(m => ({ ...m, imgUploading:false })); }
   };
 
-  // ── Save edited voucher ───────────────────────────────────────
   const handleSaveEdit = async () => {
     if (!editModal.voucher) return;
     setEditModal(m => ({ ...m, saving:true }));
@@ -272,6 +268,7 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
       alert('Save မအောင်မြင်ပါ — ထပ်ကြိုးစားပါ');
     }
   };
+
   const confirmDelete = async()=>{
     if(deleteModal.confirmInput!==deleteModal.voucherno) return;
     setDeleteModal(m=>({...m,loading:true}));
@@ -315,7 +312,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
 
   return (
     <div className="space-y-5 font-black text-slate-950 uppercase">
-
       {analytics.balance<0&&(
         <div className="bg-rose-50 p-3 rounded-2xl border border-rose-200">
           <div className="animate-pulse flex justify-center items-center gap-2 text-[11px] tracking-widest font-black text-rose-700">
@@ -324,7 +320,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* ── FILTER ── */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3 print:hidden">
         <div className="flex items-center gap-2 flex-wrap">
           <Filter size={13} className="text-slate-400 shrink-0"/>
@@ -356,7 +351,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
           <FSelect label="SUB-CATEGORY" value={filter.subCategory} options={subCategoryOptions} onChange={(v:string)=>setFilter({...filter,subCategory:v})}/>
           <FSelect label="VENDOR"       value={filter.vendor}      options={vendorOptions}      onChange={(v:string)=>setFilter({...filter,vendor:v})}/>
           <FSelect label="BY"           value={filter.enteredBy}   options={enteredByOptions}   onChange={(v:string)=>setFilter({...filter,enteredBy:v})}/>
-          {/* ACCOUNT with ALL ACCOUNTS combined option */}
           <FSelect
             label="ACCOUNT"
             value={filter.account === '' ? defaultAccount : filter.account}
@@ -375,7 +369,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       </div>
 
-      {/* Account badge + count */}
       <div className="flex items-center gap-2 flex-wrap">
         <Wallet size={13} className="text-slate-400"/>
         <span className="text-[10px] text-slate-500 tracking-widest">VIEWING:</span>
@@ -385,7 +378,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         <span className="text-[10px] text-slate-400">{filtered.length} vouchers</span>
       </div>
 
-      {/* Per-account breakdown — visible when ALL ACCOUNTS selected */}
       {isAllAccounts && accountSummary.length > 1 && (
         <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 space-y-2">
           <h3 className="text-[9px] text-purple-600 tracking-widest mb-2">ACCOUNT BREAKDOWN</h3>
@@ -402,7 +394,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* KPI tiles */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
           <p className="text-[9px] text-slate-500 mb-1 tracking-widest">CASH IN</p>
@@ -421,7 +412,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       </div>
 
-      {/* Top 5 vendors */}
       {topVendors.length > 0 && (
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><Trophy size={13}/> TOP VENDORS BY SPEND</h3>
@@ -444,7 +434,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* Daily trend */}
       {analytics.dailyTrends.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><TrendingUp size={13}/> DAILY TREND</h3>
@@ -456,7 +445,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* Monthly trend */}
       {analytics.monthlyTrends.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><TrendingUp size={13}/> MONTHLY TREND</h3>
@@ -468,7 +456,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* Expense pie */}
       {analytics.categories.length>0&&(
         <div className="bg-white p-4 rounded-2xl border border-slate-200">
           <h3 className="text-[10px] text-slate-500 mb-3 flex items-center gap-2 tracking-widest"><Layers size={13}/> EXPENSE ALLOCATION</h3>
@@ -498,7 +485,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* Sub-category breakdown */}
       {categorySpecificData.length>0&&(
         <div className="space-y-3">
           <div className="flex items-center gap-2 px-1"><BarChart3 className="text-slate-400" size={15}/><h2 className="text-xs tracking-widest font-black">SUB-CATEGORY BREAKDOWN</h2></div>
@@ -534,7 +520,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* Audit log */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 px-1"><ListChecks className="text-slate-400" size={15}/><h2 className="text-xs tracking-widest font-black">DETAILED AUDIT LOG</h2></div>
         {Object.keys(groupedAuditLog).map(catName=>{
@@ -617,7 +602,6 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         })}
       </div>
 
-      {/* Image preview */}
       {selectedImg&&(
         <div className="fixed inset-0 bg-slate-900/90 z-[9999] flex items-center justify-center p-6 backdrop-blur-sm print:hidden" onClick={()=>setSelectedImg(null)}>
           <button className="absolute top-6 right-6 text-white"><X size={28}/></button>
@@ -625,165 +609,44 @@ export default function FinancialDashboard({ vouchers = [], onRefresh, dashboard
         </div>
       )}
 
-      {/* ── Edit Voucher Modal ── */}
       {editModal.open && editModal.voucher && (
         <div className="fixed inset-0 bg-slate-900/80 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm print:hidden"
           onClick={()=>{ if(!editModal.saving) setEditModal(m=>({...m,open:false})); }}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
-            onClick={e=>e.stopPropagation()}>
-
-            {/* Header */}
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
             <div className="bg-slate-950 text-white px-5 py-4 flex items-center justify-between shrink-0">
-              <div>
-                <p className="text-[9px] text-slate-400 tracking-widest uppercase">Edit Voucher</p>
-                <p className="text-sm font-black tracking-widest">{editModal.voucher.voucherno}</p>
-              </div>
-              <button onClick={()=>setEditModal(m=>({...m,open:false}))} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
-                <X size={16}/>
-              </button>
+              <div><p className="text-[9px] text-slate-400 tracking-widest uppercase">Edit Voucher</p><p className="text-sm font-black tracking-widest">{editModal.voucher.voucherno}</p></div>
+              <button onClick={()=>setEditModal(m=>({...m,open:false}))} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"><X size={16}/></button>
             </div>
-
-            {/* Scrollable form */}
             <div className="overflow-y-auto flex-1 p-5 space-y-4">
-
-              {/* Date */}
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Date</label>
-                <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950"
-                  value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))}/>
-              </div>
-
-              {/* Vendor */}
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Vendor / Supplier</label>
-                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950 uppercase"
-                  value={editForm.vendor} onChange={e=>setEditForm(f=>({...f,vendor:e.target.value}))}/>
-              </div>
-
-              {/* Category path */}
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Category</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    {label:'Category', key:'category' as const},
-                    {label:'Sub 1',    key:'sub1'     as const},
-                    {label:'Sub 2',    key:'sub2'     as const},
-                    {label:'Sub 3',    key:'sub3'     as const},
-                  ].map(({label,key})=>(
-                    <div key={key} className="space-y-0.5">
-                      <p className="text-[8px] text-slate-400 uppercase">{label}</p>
-                      <input className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-slate-500 text-slate-950 uppercase"
-                        value={editForm[key]} onChange={e=>setEditForm(f=>({...f,[key]:e.target.value.toUpperCase()}))}/>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Item description */}
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Item Description</label>
-                <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950"
-                  value={editForm.item} onChange={e=>setEditForm(f=>({...f,item:e.target.value}))}/>
-              </div>
-
-              {/* Amount */}
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Amount (MMK)</label>
-                <input type="number" className="w-full p-3 bg-slate-950 text-white border-0 rounded-xl text-xl text-center font-black outline-none"
-                  value={editForm.cost_total} onChange={e=>setEditForm(f=>({...f,cost_total:parseFloat(e.target.value)||0}))}/>
-              </div>
-
-              {/* Note */}
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Note</label>
-                <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-slate-500 text-slate-950 resize-none h-16 normal-case"
-                  value={editForm.note} onChange={e=>setEditForm(f=>({...f,note:e.target.value}))}/>
-              </div>
-
-              {/* Photo */}
-              <div className="space-y-2">
-                <label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Photo</label>
-                {editForm.image_data ? (
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={editForm.image_data} alt="voucher" className="w-full max-h-40 object-contain rounded-xl border border-slate-200"/>
-                    <div className="absolute top-2 right-2 flex gap-1.5">
-                      <label className="cursor-pointer p-1.5 bg-amber-100 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-200 transition-colors">
-                        <Pencil size={12}/>
-                        <input type="file" accept="image/*" className="hidden"
-                          onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadEditPhoto(f); e.target.value=''; }}/>
-                      </label>
-                      <button onClick={()=>setEditForm(f=>({...f,image_data:''}))}
-                        className="p-1.5 bg-rose-100 text-rose-500 border border-rose-200 rounded-lg hover:bg-rose-200 transition-colors">
-                        <X size={12}/>
-                      </button>
-                    </div>
-                    {editModal.imgUploading && (
-                      <div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center">
-                        <RefreshCcw size={20} className="animate-spin text-slate-400"/>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <label className="flex items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-slate-400 transition-colors text-slate-400 text-[11px] font-black uppercase">
-                    {editModal.imgUploading
-                      ? <><RefreshCcw size={14} className="animate-spin"/> Uploading...</>
-                      : <><ImageIcon size={14}/> ပုံ ပြောင်းမည်</>
-                    }
-                    <input type="file" accept="image/*" className="hidden"
-                      onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadEditPhoto(f); e.target.value=''; }}/>
-                  </label>
-                )}
-              </div>
+              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Date</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))}/></div>
+              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Vendor / Supplier</label><input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950 uppercase" value={editForm.vendor} onChange={e=>setEditForm(f=>({...f,vendor:e.target.value}))}/></div>
+              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Category</label><div className="grid grid-cols-2 gap-2">{[
+                {label:'Category', key:'category'},{label:'Sub 1',key:'sub1'},{label:'Sub 2',key:'sub2'},{label:'Sub 3',key:'sub3'},
+              ].map(({label,key})=>(
+                <div key={key} className="space-y-0.5"><p className="text-[8px] text-slate-400 uppercase">{label}</p><input className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-slate-500 text-slate-950 uppercase" value={editForm[key as keyof typeof editForm]} onChange={e=>setEditForm(f=>({...f,[key]:e.target.value.toUpperCase()}))}/></div>
+              ))}</div></div>
+              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Item Description</label><input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-slate-500 text-slate-950" value={editForm.item} onChange={e=>setEditForm(f=>({...f,item:e.target.value}))}/></div>
+              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Amount (MMK)</label><input type="number" className="w-full p-3 bg-slate-950 text-white border-0 rounded-xl text-xl text-center font-black outline-none" value={editForm.cost_total} onChange={e=>setEditForm(f=>({...f,cost_total:parseFloat(e.target.value)||0}))}/></div>
+              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Note</label><textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-slate-500 text-slate-950 resize-none h-16 normal-case" value={editForm.note} onChange={e=>setEditForm(f=>({...f,note:e.target.value}))}/></div>
+              <div className="space-y-2"><label className="text-[9px] text-slate-400 uppercase tracking-widest font-black">Photo</label>{editForm.image_data ? (
+                <div className="relative"><img src={editForm.image_data} alt="voucher" className="w-full max-h-40 object-contain rounded-xl border border-slate-200"/><div className="absolute top-2 right-2 flex gap-1.5"><label className="cursor-pointer p-1.5 bg-amber-100 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-200 transition-colors"><Pencil size={12}/><input type="file" accept="image/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadEditPhoto(f); e.target.value=''; }}/></label><button onClick={()=>setEditForm(f=>({...f,image_data:''}))} className="p-1.5 bg-rose-100 text-rose-500 border border-rose-200 rounded-lg hover:bg-rose-200 transition-colors"><X size={12}/></button></div>{editModal.imgUploading && (<div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center"><RefreshCcw size={20} className="animate-spin text-slate-400"/></div>)}</div>
+              ) : (<label className="flex items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-slate-400 transition-colors text-slate-400 text-[11px] font-black uppercase">{editModal.imgUploading ? <><RefreshCcw size={14} className="animate-spin"/> Uploading...</> : <><ImageIcon size={14}/> ပုံ ပြောင်းမည်</>}<input type="file" accept="image/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadEditPhoto(f); e.target.value=''; }}/></label>)}</div>
             </div>
-
-            {/* Footer buttons */}
             <div className="px-5 pb-5 pt-3 flex gap-3 shrink-0 border-t border-slate-100">
-              <button onClick={handleSaveEdit}
-                disabled={editModal.saving || editModal.imgUploading}
-                className="flex-1 bg-slate-950 text-white py-3.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-800 transition-colors">
-                {editModal.saving
-                  ? <><RefreshCcw size={13} className="animate-spin"/> Saving...</>
-                  : <><Save size={13}/> Save Changes</>
-                }
-              </button>
-              <button onClick={()=>setEditModal(m=>({...m,open:false}))} disabled={editModal.saving}
-                className="flex-1 bg-slate-100 text-slate-600 py-3.5 rounded-2xl text-xs font-black hover:bg-slate-200 transition-colors">
-                Cancel
-              </button>
+              <button onClick={handleSaveEdit} disabled={editModal.saving || editModal.imgUploading} className="flex-1 bg-slate-950 text-white py-3.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-800 transition-colors">{editModal.saving ? <><RefreshCcw size={13} className="animate-spin"/> Saving...</> : <><Save size={13}/> Save Changes</>}</button>
+              <button onClick={()=>setEditModal(m=>({...m,open:false}))} disabled={editModal.saving} className="flex-1 bg-slate-100 text-slate-600 py-3.5 rounded-2xl text-xs font-black hover:bg-slate-200 transition-colors">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete modal */}
       {deleteModal.open&&(
         <div className="fixed inset-0 bg-slate-900/80 z-[9999] flex items-center justify-center p-6 backdrop-blur-sm print:hidden">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 border border-rose-200">
-            <div className="flex items-center gap-3">
-              <div className="bg-rose-100 p-2.5 rounded-2xl"><ShieldAlert size={22} className="text-rose-600"/></div>
-              <div><h2 className="text-sm font-black tracking-widest">CONFIRM DELETE</h2><p className="text-[10px] text-slate-400 mt-0.5 normal-case">ဤလုပ်ဆောင်ချက်ကို ပြန်မဖြေဖြစ်နိုင်ပါ</p></div>
-            </div>
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3">
-              <p className="text-[9px] text-slate-400 tracking-widest mb-1">VOUCHER</p>
-              <p className="text-lg font-black text-rose-700 tracking-widest">{deleteModal.voucherno}</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] text-slate-400 tracking-widest">VOUCHER ID ရိုက်ထည့်ပါ</label>
-              <input autoFocus type="text" className="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:border-rose-400 tracking-widest"
-                placeholder={deleteModal.voucherno} value={deleteModal.confirmInput}
-                onChange={e=>setDeleteModal(m=>({...m,confirmInput:e.target.value.toUpperCase()}))}
-                onKeyDown={e=>e.key==='Enter'&&confirmDelete()}/>
-              {deleteModal.confirmInput.length>0&&deleteModal.confirmInput!==deleteModal.voucherno&&<p className="text-[10px] text-rose-500">✗ ID မတူပါ</p>}
-              {deleteModal.confirmInput===deleteModal.voucherno&&<p className="text-[10px] text-emerald-600">✓ ID တူပါသည်</p>}
-            </div>
-            <div className="flex gap-3">
-              <button onClick={()=>setDeleteModal({open:false,voucherno:'',confirmInput:'',loading:false})} className="flex-1 py-3.5 bg-slate-100 rounded-2xl text-xs font-black hover:bg-slate-200 border border-slate-200">CANCEL</button>
-              <button onClick={confirmDelete} disabled={deleteModal.confirmInput!==deleteModal.voucherno||deleteModal.loading}
-                className={`flex-1 py-3.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 transition-all ${deleteModal.confirmInput===deleteModal.voucherno&&!deleteModal.loading?'bg-rose-600 text-white hover:bg-rose-700':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
-                {deleteModal.loading?<><span className="animate-spin">⟳</span> DELETING...</>:<><Trash2 size={12}/> DELETE</>}
-              </button>
-            </div>
+            <div className="flex items-center gap-3"><div className="bg-rose-100 p-2.5 rounded-2xl"><ShieldAlert size={22} className="text-rose-600"/></div><div><h2 className="text-sm font-black tracking-widest">CONFIRM DELETE</h2><p className="text-[10px] text-slate-400 mt-0.5 normal-case">ဤလုပ်ဆောင်ချက်ကို ပြန်မဖြေဖြစ်နိုင်ပါ</p></div></div>
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3"><p className="text-[9px] text-slate-400 tracking-widest mb-1">VOUCHER</p><p className="text-lg font-black text-rose-700 tracking-widest">{deleteModal.voucherno}</p></div>
+            <div className="space-y-2"><label className="text-[10px] text-slate-400 tracking-widest">VOUCHER ID ရိုက်ထည့်ပါ</label><input autoFocus type="text" className="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-2xl text-sm font-black uppercase outline-none focus:border-rose-400 tracking-widest" placeholder={deleteModal.voucherno} value={deleteModal.confirmInput} onChange={e=>setDeleteModal(m=>({...m,confirmInput:e.target.value.toUpperCase()}))} onKeyDown={e=>e.key==='Enter'&&confirmDelete()}/>{deleteModal.confirmInput.length>0&&deleteModal.confirmInput!==deleteModal.voucherno&&<p className="text-[10px] text-rose-500">✗ ID မတူပါ</p>}{deleteModal.confirmInput===deleteModal.voucherno&&<p className="text-[10px] text-emerald-600">✓ ID တူပါသည်</p>}</div>
+            <div className="flex gap-3"><button onClick={()=>setDeleteModal({open:false,voucherno:'',confirmInput:'',loading:false})} className="flex-1 py-3.5 bg-slate-100 rounded-2xl text-xs font-black hover:bg-slate-200 border border-slate-200">CANCEL</button><button onClick={confirmDelete} disabled={deleteModal.confirmInput!==deleteModal.voucherno||deleteModal.loading} className={`flex-1 py-3.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 transition-all ${deleteModal.confirmInput===deleteModal.voucherno&&!deleteModal.loading?'bg-rose-600 text-white hover:bg-rose-700':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{deleteModal.loading?<><span className="animate-spin">⟳</span> DELETING...</>:<><Trash2 size={12}/> DELETE</>}</button></div>
           </div>
         </div>
       )}

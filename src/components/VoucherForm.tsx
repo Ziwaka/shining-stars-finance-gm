@@ -114,7 +114,11 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const cropImgRef = useRef<HTMLImageElement>(null);
   const dragState = useRef<{handle:string;startX:number;startY:number;startRect:typeof cropRect}|null>(null);
 
-  // Hardcoded fallback prefixes (သင်သုံးသော Category များအတွက်)
+  // Debug state
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [showDebug, setShowDebug] = useState(false);
+
+  // Hardcoded fallback prefixes
   const hardcodedPrefixes: Record<string, string> = {
     'OFFICE': 'OF',
     'HOSTEL': 'HT',
@@ -129,13 +133,9 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
   const getPrefixForCategory = (cat: string): string | null => {
     if (!cat) return null;
     const upperCat = cat.trim().toUpperCase();
-    // 1. config.prefixes (case-insensitive)
     for (const [key, prefix] of Object.entries(config.prefixes)) {
-      if (key.trim().toUpperCase() === upperCat) {
-        return String(prefix).toUpperCase();
-      }
+      if (key.trim().toUpperCase() === upperCat) return String(prefix).toUpperCase();
     }
-    // 2. hardcoded fallback
     if (hardcodedPrefixes[upperCat]) return hardcodedPrefixes[upperCat];
     return null;
   };
@@ -157,15 +157,12 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       prefix = mapped || 'EXP';
     }
     prefix = prefix.toUpperCase();
-
     const lastNum = getLastSerial(prefix);
-    const inBatchCount = currentBatch.filter(i =>
-      String(i.voucherno).toUpperCase().startsWith(prefix)
-    ).length;
+    const inBatchCount = currentBatch.filter(i => String(i.voucherno).toUpperCase().startsWith(prefix)).length;
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
     const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
     const newId = `${prefix}-${month}-${nextNum}`;
-    console.log(`[VrID] cat:${cat} prefix:${prefix} lastNum:${lastNum} batchCount:${inBatchCount} → ${newId}`);
+    console.log(`[VrID] type:${type} cat:${cat} → ${newId}`);
     return newId;
   };
 
@@ -177,12 +174,13 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     }
   }, [category, type, date, itemList.length]);
 
+  // Load config and debug
   useEffect(() => {
     fetch('/api/gas')
       .then(res => res.json())
       .then(data => {
-        console.log('[Config] prefixes:', data.prefixes);
-        console.log('[Config] lastSerials:', data.lastSerials);
+        console.log('[Config] FULL RESPONSE:', data);
+        setDebugInfo(data);
         setConfig({
           categoryList: data.categoryList || data.tree || [],
           prefixes: data.prefixes || {},
@@ -198,7 +196,10 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           setAccount(gm ? String(gm) : String(data.accounts[0]));
         }
       })
-      .catch(err => console.error('Failed to fetch config:', err));
+      .catch(err => {
+        console.error('Failed to fetch config:', err);
+        setDebugInfo({ error: err.message });
+      });
   }, []);
 
   useEffect(() => {
@@ -306,7 +307,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     }
   };
 
-  // Scanner functions (unchanged)
   const openCamera = async () => {
     try {
       const ms = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:3840}, height:{ideal:2160} } });
@@ -401,7 +401,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     };
     img.src=rawSrc;
   };
-
   const resetForm = () => {
     setVendor(''); setSupplierSearch(''); setSelectedSupplier(null);
     setCategory(''); setSub1(''); setSub2(''); setSub3(''); setSub4(''); setSub5('');
@@ -409,7 +408,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setItemSearch(''); setImage(''); setVoucherno('');
     setSubmitStatus('idle');
   };
-
   const uploadToCloudinary = async (base64: string): Promise<string> => {
     if (!base64) return '';
     try {
@@ -429,7 +427,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       setImageUploading(false);
     }
   };
-
   const addItem = async () => {
     const countNum = parseFloat(currentItem.count) || 0;
     const costNum  = parseFloat(currentItem.cost_piece) || 0;
@@ -438,7 +435,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     const total = !isNaN(totalFromState) && totalFromState > 0
       ? Math.round(totalFromState)
       : Math.round(countNum * costNum);
-
     const vrNo = itemList.length === 0 ? generateVrID(category, itemList) : voucherno;
     const imageValue = image.startsWith('http') ? image : await uploadToCloudinary(image);
     const newItem = {
@@ -463,7 +459,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     setItemSearch('');
     setImage('');
   };
-
   const loadConfig = (force = false) => fetch('/api/gas?t=' + Date.now() + (force ? '&force=1' : ''))
     .then(res => res.json())
     .then(data => {
@@ -478,7 +473,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       });
     })
     .catch(err => console.error('Failed to fetch config:', err));
-
   const handleFinalSubmit = async () => {
     if (itemList.length === 0 || submitStatus === 'processing') return;
     setSubmitStatus('processing');
@@ -503,7 +497,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     }
   };
 
-  // JSX Render (same as before – kept intact)
   return (
     <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950">
       {/* Crop Modal */}
@@ -585,7 +578,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           <div className="flex items-center gap-2 px-2"><User size={16} className="text-slate-500"/><select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={enteredBy} onChange={e => { setEnteredBy(e.target.value); if (submitStatus === 'success') setSubmitStatus('idle'); }}>{config.users?.map((u: any, i: number) => <option key={i} value={String(u)}>{String(u)}</option>)}</select></div>
           <div className="flex items-center gap-2 px-2 border-l-2 border-slate-300 pl-4"><Wallet size={16} className="text-slate-500"/><select className="bg-transparent text-sm outline-none font-black text-slate-950 cursor-pointer uppercase" value={account} onChange={e => { setAccount(e.target.value); if (submitStatus === 'success') setSubmitStatus('idle'); }}>{config.accounts?.map((a: any, i: number) => <option key={i} value={String(a)}>{String(a)}</option>)}</select></div>
         </div>
-        {/* Supplier / Date / Voucher ID */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-200 font-black">
           <div className="space-y-2 font-black" ref={supplierRef}>
             <label className="text-[10px] text-slate-500 tracking-widest font-black">SUPPLIER</label>
@@ -649,7 +641,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           <div className="space-y-1 font-black"><label className="text-[10px] text-slate-500 tracking-widest font-black">DATE</label><input type="date" className="w-full bg-white border border-slate-300 p-3 rounded-xl outline-none focus:border-slate-500 text-sm font-black text-slate-950" value={date} onChange={e => setDate(e.target.value)}/></div>
           <div className="space-y-1 font-black"><label className="text-[10px] text-slate-500 tracking-widest font-black">VOUCHER ID</label><div className="flex items-center bg-white border border-slate-300 rounded-xl px-3 h-[46px] font-black"><span className="text-slate-950 text-sm flex-grow font-black">{voucherno || 'ID AUTO'}</span><RefreshCcw size={16} className="text-slate-400 cursor-pointer hover:text-slate-950" onClick={() => { if (category) { const newId = generateVrID(category, itemList); setVoucherno(newId); } }}/></div></div>
         </div>
-        {/* Category + Item inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-black">
           <div className="space-y-4 font-black">
             <div className="space-y-1">
@@ -717,7 +708,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </div>
         </div>
       </div>
-      {/* BATCH PANEL */}
       <div className="lg:col-span-4 flex flex-col bg-slate-50 border-l border-slate-200 font-black">
         <div className="bg-slate-200 p-5 text-slate-950 flex justify-between items-center font-black border-b border-slate-300"><span className="text-[10px] tracking-[0.3em] font-black">BATCH ({itemList.length})</span>{itemList.length > 0 && <span className="text-[9px] text-slate-500 tracking-widest">✏️ EDIT နှိပ်ပြင်နိုင်</span>}</div>
         <div className="flex-grow p-5 space-y-4 overflow-y-auto max-h-[500px] font-black">
@@ -746,7 +736,6 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </button>
         </div>
       </div>
-      {/* EDIT SUPPLIER MODAL */}
       {showEditModal && editingSupplier && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
@@ -762,6 +751,15 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
           </div>
         </div>
       )}
+      {/* Debug Panel */}
+      <div className="col-span-12 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[10px] font-mono mx-6">
+        <button onClick={() => setShowDebug(!showDebug)} className="text-amber-700 underline font-black">🛠️ Debug Info (ပြဿနာရှိမှ နှိပ်ပါ)</button>
+        {showDebug && debugInfo && (
+          <pre className="mt-2 whitespace-pre-wrap text-slate-700 max-h-60 overflow-auto text-[9px]">
+            {JSON.stringify(debugInfo, null, 2)}
+          </pre>
+        )}
+      </div>
     </div>
   );
 }

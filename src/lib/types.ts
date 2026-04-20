@@ -42,6 +42,10 @@ export interface VoucherRaw {
   note?: string;
   Note?: string;
 
+  // Income (Cash In amount — separate column variant)
+  income?: number | string;
+  Income?: number | string;
+
   // Cost — GAS column header variants
   'cost_(total)'?: number | string;
   cost_total?: number | string;

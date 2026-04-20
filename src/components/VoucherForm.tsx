@@ -210,11 +210,24 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
       prefix = 'INC';
     } else {
       const mapped = getPrefixForCategory(cat);
-      prefix = mapped || 'EXP';  // fallback to 'EXP' if no mapping
+      prefix = mapped || 'EXP';
     }
 
-    const lastNum = config.lastSerials[prefix] || 0;
-    const inBatchCount = currentBatch.filter(i => String(i.voucherno).startsWith(prefix)).length;
+    // Always uppercase — ID format: FUEL-04-012 (consistent)
+    prefix = prefix.toUpperCase();
+
+    // Case-insensitive lastSerials lookup
+    const serialsUpper: Record<string, number> = {};
+    for (const [k, v] of Object.entries(config.lastSerials)) {
+      serialsUpper[k.toUpperCase()] = Number(v) || 0;
+    }
+    const lastNum = serialsUpper[prefix] || 0;
+
+    // Case-insensitive batch count
+    const inBatchCount = currentBatch.filter(i =>
+      String(i.voucherno).toUpperCase().startsWith(prefix)
+    ).length;
+
     const nextNum = (lastNum + inBatchCount + 1).toString().padStart(3, '0');
     const month = (new Date(date).getMonth() + 1).toString().padStart(2, '0');
     const newId = `${prefix}-${month}-${nextNum}`;

@@ -522,6 +522,42 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
     }
   };
 
+  // ─── FIX: Save new supplier to backend (this replaces the inline save button logic) ───
+  const handleSaveNewSupplier = async () => {
+    if (!newSupplier.name) return;
+    const existing = config.suppliers.find((s: any) => s.name.toLowerCase() === newSupplier.name.toLowerCase());
+    let mergedSupplier;
+    if (existing) {
+      const mergedServices = [existing.service, newSupplier.service].filter(Boolean).join(', ');
+      mergedSupplier = { ...existing, ...newSupplier, service: mergedServices };
+    } else {
+      mergedSupplier = { ...newSupplier };
+    }
+    try {
+      const res = await fetch('/api/gas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'updateSupplier', supplier: mergedSupplier }),
+      });
+      const data = await res.json();
+      if (data.result === 'saved') {
+        await loadConfig(true);
+        setVendor(mergedSupplier.name);
+        setSupplierSearch(mergedSupplier.name);
+        setSelectedSupplier(mergedSupplier);
+        setShowNewSupplierForm(false);
+        setNewSupplier({ name: '', phone1: '', phone2: '', phone3: '', address: '', service: '' });
+        setToastMsg('Supplier saved successfully');
+        setTimeout(() => setToastMsg(''), 3000);
+      } else {
+        alert('Failed to save supplier');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error saving supplier');
+    }
+  };
+
   // ────────────── JSX (Full UI) ─────────────────────────────────
   return (
     <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-0 font-black text-slate-950">
@@ -653,20 +689,7 @@ export default function VoucherForm({ onRefresh }: { onRefresh: () => void }) {
                   <div key={key} className="flex items-center gap-2"><span className="text-slate-400">{icon}</span><input className="flex-1 bg-slate-50 border border-slate-200 p-2 rounded-lg text-[11px] outline-none font-black text-slate-950" placeholder={label} value={(newSupplier as any)[key]} onChange={e => setNewSupplier({ ...newSupplier, [key]: e.target.value })}/></div>
                 ))}
                 <div className="flex gap-2 pt-1">
-                  <button onClick={() => {
-                    if (!newSupplier.name) return;
-                    const existing = config.suppliers.find((s: any) => s.name.toLowerCase() === newSupplier.name.toLowerCase());
-                    if (existing) {
-                      const mergedServices = [existing.service, newSupplier.service].filter(Boolean).join(', ');
-                      const merged = { ...existing, ...newSupplier, service: mergedServices };
-                      setVendor(merged.name); setSupplierSearch(merged.name); setSelectedSupplier(merged);
-                      setConfig((prev: any) => ({ ...prev, suppliers: prev.suppliers.map((s: any) => s.name.toLowerCase() === merged.name.toLowerCase() ? merged : s) }));
-                    } else {
-                      setVendor(newSupplier.name); setSupplierSearch(newSupplier.name); setSelectedSupplier(newSupplier);
-                      setConfig((prev: any) => ({ ...prev, suppliers: [...prev.suppliers, { ...newSupplier }] }));
-                    }
-                    setShowNewSupplierForm(false); setNewSupplier({ name: '', phone1: '', phone2: '', phone3: '', address: '', service: '' });
-                  }} className="flex-1 bg-slate-950 text-white text-[10px] py-2 rounded-lg font-black">SAVE</button>
+                  <button onClick={handleSaveNewSupplier} className="flex-1 bg-slate-950 text-white text-[10px] py-2 rounded-lg font-black">SAVE</button>
                   <button onClick={() => setShowNewSupplierForm(false)} className="flex-1 bg-slate-100 text-slate-600 text-[10px] py-2 rounded-lg font-black">CANCEL</button>
                 </div>
               </div>
